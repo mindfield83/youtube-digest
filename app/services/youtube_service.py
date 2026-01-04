@@ -9,7 +9,7 @@ Handles:
 """
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -349,11 +349,20 @@ class YouTubeService:
                     except ValueError:
                         published_at = datetime.utcnow()
 
-                    # Check if video is after since_date
-                    if since_date and published_at.replace(tzinfo=None) < since_date:
-                        # Videos are ordered newest first, so we can stop
-                        logger.debug(f"Reached videos older than {since_date}")
-                        return videos
+                    # Check if video is after since_date (both must be timezone-aware)
+                    if since_date:
+                        # Ensure both are comparable (both aware or both naive)
+                        compare_date = published_at
+                        compare_since = since_date
+                        if compare_date.tzinfo is not None and compare_since.tzinfo is None:
+                            compare_since = compare_since.replace(tzinfo=timezone.utc)
+                        elif compare_date.tzinfo is None and compare_since.tzinfo is not None:
+                            compare_date = compare_date.replace(tzinfo=timezone.utc)
+
+                        if compare_date < compare_since:
+                            # Videos are ordered newest first, so we can stop
+                            logger.debug(f"Reached videos older than {since_date}")
+                            return videos
 
                     videos.append({
                         "video_id": content_details.get("videoId"),
