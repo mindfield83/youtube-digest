@@ -176,7 +176,7 @@ def process_video(self, video_id: str) -> dict[str, Any]:
             try:
                 # Fetch transcript
                 transcript_service = TranscriptService()
-                transcript_result = transcript_service.fetch_transcript(video_id)
+                transcript_result = transcript_service.get_transcript(video_id)
 
                 video.transcript = transcript_result.text
                 video.transcript_source = transcript_result.source
@@ -457,6 +457,8 @@ def sync_channel_metadata(self, fetch_videos: bool = True) -> dict[str, Any]:
             db.commit()
 
             # Phase 2: Fetch videos if requested
+            video_ids_to_process = []
+
             if fetch_videos:
                 # Use 14 days as date filter, but fetch up to 10 videos per channel
                 since_date = datetime.now(timezone.utc) - timedelta(days=14)
@@ -527,13 +529,9 @@ def sync_channel_metadata(self, fetch_videos: bool = True) -> dict[str, Any]:
                                     processing_status="pending",
                                 )
                                 db.add(new_video)
-                                db.flush()
 
                                 new_videos_found += 1
-
-                                # Queue for processing
-                                process_video.delay(video_id)
-                                videos_queued += 1
+                                video_ids_to_process.append(video_id)
 
                         logger.info(f"Channel {channel_name}: found {len(videos)} videos")
 
@@ -546,7 +544,13 @@ def sync_channel_metadata(self, fetch_videos: bool = True) -> dict[str, Any]:
                     {"last_checked": datetime.now(timezone.utc)}
                 )
 
+            # Commit all changes BEFORE queueing tasks
             db.commit()
+
+        # Queue video processing AFTER commit (outside the db context)
+        for video_id in video_ids_to_process:
+            process_video.delay(video_id)
+            videos_queued += 1
 
         result = {
             "status": "completed",
