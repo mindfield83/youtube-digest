@@ -345,50 +345,44 @@ async def get_status_html(db: Session = Depends(get_db)):
     # Total videos
     total_videos = pending + processing + completed + failed
 
+    # Status dot colors
+    oauth_color = "#22c55e" if oauth_valid else "#ef4444"
+    worker_color = "#22c55e" if worker_active else "#ef4444"
+
     html = f"""
-    <div class="status-bar">
-        <!-- Row 1: System Status + Overview -->
-        <div class="status-row">
-            <div class="status-item">
-                <span class="status-dot {oauth_dot}"></span>
-                <span class="status-label">OAuth</span>
-                <span class="status-value">{oauth_text}</span>
-            </div>
-            <div class="status-separator"></div>
-            <div class="status-item">
-                <span class="status-dot {worker_dot}"></span>
-                <span class="status-label">Worker</span>
-                <span class="status-value">{worker_text}</span>
-            </div>
-            <div class="status-separator"></div>
-            <div class="status-item">
-                <i class="ph ph-broadcast"></i>
-                <span class="status-label">Kanäle</span>
-                <span class="status-value">{total_channels}</span>
-            </div>
-            <div class="status-separator"></div>
-            <div class="status-item">
-                <i class="ph ph-video"></i>
-                <span class="status-label">Videos</span>
-                <span class="status-value" title="Ausstehend: {pending}, In Bearbeitung: {processing}, Abgeschlossen: {completed}, Fehlgeschlagen: {failed}">
-                    {total_videos} <small style="opacity:0.7">(⏳{pending} ⚙️{processing} ✅{completed} ❌{failed})</small>
-                </span>
-            </div>
-        </div>
-        <!-- Row 2: Timestamps -->
-        <div class="status-row secondary">
-            <div class="status-item">
-                <i class="ph ph-clock"></i>
-                <span class="status-label">Letzte Prüfung</span>
-                <span class="status-value">{last_check_text}</span>
-            </div>
-            <div class="status-separator"></div>
-            <div class="status-item">
-                <i class="ph ph-envelope"></i>
-                <span class="status-label">Letzter Digest</span>
-                <span class="status-value">{last_digest_text}</span>
-            </div>
-        </div>
+    <div class="status-bar" style="background: #fff; border-radius: 8px; padding: 16px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-wrap: wrap; gap: 12px 32px; align-items: center;">
+        <span style="display: inline-flex; align-items: center; gap: 6px;">
+            <span style="width: 10px; height: 10px; border-radius: 50%; background: {oauth_color};"></span>
+            <span style="color: #666; font-size: 0.85rem;">OAuth</span>
+            <strong style="color: #17214B;">{oauth_text}</strong>
+        </span>
+        <span style="color: #ddd;">|</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px;">
+            <span style="width: 10px; height: 10px; border-radius: 50%; background: {worker_color};"></span>
+            <span style="color: #666; font-size: 0.85rem;">Worker</span>
+            <strong style="color: #17214B;">{worker_text}</strong>
+        </span>
+        <span style="color: #ddd;">|</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px;">
+            <span style="color: #666; font-size: 0.85rem;">Kanäle</span>
+            <strong style="color: #17214B;">{total_channels}</strong>
+        </span>
+        <span style="color: #ddd;">|</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px;">
+            <span style="color: #666; font-size: 0.85rem;">Videos</span>
+            <strong style="color: #17214B;" title="Ausstehend: {pending}, In Bearbeitung: {processing}, Abgeschlossen: {completed}, Fehlgeschlagen: {failed}">{total_videos}</strong>
+            <span style="color: #999; font-size: 0.8rem;">(⏳{pending} ⚙️{processing} ✅{completed} ❌{failed})</span>
+        </span>
+        <span style="color: #ddd;">|</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px;">
+            <span style="color: #666; font-size: 0.85rem;">Letzte Prüfung</span>
+            <strong style="color: #17214B;">{last_check_text}</strong>
+        </span>
+        <span style="color: #ddd;">|</span>
+        <span style="display: inline-flex; align-items: center; gap: 6px;">
+            <span style="color: #666; font-size: 0.85rem;">Letzter Digest</span>
+            <strong style="color: #17214B;">{last_digest_text}</strong>
+        </span>
     </div>
     """
     return HTMLResponse(content=html)
