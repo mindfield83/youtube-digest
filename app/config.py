@@ -57,13 +57,19 @@ class Settings(BaseSettings):
         description="Supadata API key for transcript fallback",
     )
 
-    # SMTP Configuration
-    smtp_host: str = Field(default="mail.mindfield.de")
-    smtp_port: int = Field(default=587)
-    smtp_user: str = Field(default="")
-    smtp_password: str = Field(default="")
-    smtp_from_address: str = Field(default="digest@mindfield.de")
-    smtp_to_address: str = Field(default="niko.huebner@gmail.com")
+    # Email Configuration (Resend API)
+    resend_api_key: str = Field(
+        default="",
+        description="Resend API key for email sending",
+    )
+    email_from_address: str = Field(
+        default="YouTube Digest <digest@resend.dev>",
+        description="Sender email (must be verified domain in Resend)",
+    )
+    email_to_address: str = Field(
+        default="niko.huebner@gmail.com",
+        description="Recipient email for digests",
+    )
 
     # Digest Settings
     digest_interval_days: int = Field(

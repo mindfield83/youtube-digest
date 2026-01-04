@@ -2,20 +2,17 @@
 Email Service for YouTube Digest
 
 Handles:
-- Sending digest emails via SMTP
+- Sending digest emails via Resend API
 - HTML + Plain text multipart messages
 - Connection testing
 - Retry logic with exponential backoff
 """
 import logging
-import smtplib
-import ssl
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from typing import Optional
+
+import resend
 
 from app.config import settings
 
@@ -24,9 +21,6 @@ logger = logging.getLogger(__name__)
 # Retry configuration
 MAX_RETRIES = 3
 RETRY_DELAYS = [2, 5, 10]  # Seconds between retries
-
-# Connection settings
-SMTP_TIMEOUT = 30  # Seconds
 
 # Validation limits
 MAX_SUBJECT_LENGTH = 998  # RFC 5321 limit
@@ -45,6 +39,7 @@ class EmailResult:
     success: bool
     message: str
     attempts: int = 1
+    email_id: Optional[str] = None
 
 
 # =============================================================================
@@ -53,14 +48,11 @@ class EmailResult:
 
 
 class EmailService:
-    """Service for sending emails via SMTP."""
+    """Service for sending emails via Resend API."""
 
     def __init__(
         self,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
-        user: Optional[str] = None,
-        password: Optional[str] = None,
+        api_key: Optional[str] = None,
         from_address: Optional[str] = None,
         to_address: Optional[str] = None,
     ):
@@ -68,57 +60,31 @@ class EmailService:
         Initialize the email service.
 
         Args:
-            host: SMTP host (uses settings if not provided)
-            port: SMTP port (uses settings if not provided)
-            user: SMTP username (uses settings if not provided)
-            password: SMTP password (uses settings if not provided)
+            api_key: Resend API key (uses settings if not provided)
             from_address: Sender email (uses settings if not provided)
             to_address: Recipient email (uses settings if not provided)
         """
-        self.host = host or settings.smtp_host
-        self.port = port or settings.smtp_port
-        self.user = user or settings.smtp_user
-        self.password = password or settings.smtp_password
-        self.from_address = from_address or settings.smtp_from_address
-        self.to_address = to_address or settings.smtp_to_address
+        self.api_key = api_key or settings.resend_api_key
+        self.from_address = from_address or settings.email_from_address
+        self.to_address = to_address or settings.email_to_address
 
-    def _create_message(
+        # Configure resend
+        if self.api_key:
+            resend.api_key = self.api_key
+
+    def _send_with_retry(
         self,
         subject: str,
         html_content: str,
         plain_content: str,
-    ) -> MIMEMultipart:
-        """
-        Create a multipart email message.
-
-        Args:
-            subject: Email subject
-            html_content: HTML body
-            plain_content: Plain text body (fallback)
-
-        Returns:
-            MIMEMultipart message
-        """
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = self.from_address
-        msg["To"] = self.to_address
-
-        # Attach plain text first (fallback), then HTML (preferred)
-        part_text = MIMEText(plain_content, "plain", "utf-8")
-        part_html = MIMEText(html_content, "html", "utf-8")
-
-        msg.attach(part_text)
-        msg.attach(part_html)
-
-        return msg
-
-    def _send_with_retry(self, msg: MIMEMultipart) -> EmailResult:
+    ) -> EmailResult:
         """
         Send email with retry logic.
 
         Args:
-            msg: MIMEMultipart message to send
+            subject: Email subject
+            html_content: HTML body
+            plain_content: Plain text fallback
 
         Returns:
             EmailResult with success status and message
@@ -132,48 +98,48 @@ class EmailService:
                     f"to {self.to_address}"
                 )
 
-                # Create SSL context
-                context = ssl.create_default_context()
+                params = {
+                    "from": self.from_address,
+                    "to": [self.to_address],
+                    "subject": subject,
+                    "html": html_content,
+                    "text": plain_content,
+                }
 
-                # Connect and send
-                with smtplib.SMTP(
-                    self.host, self.port, timeout=SMTP_TIMEOUT
-                ) as server:
-                    # Set socket timeout for all operations after connect
-                    if server.sock:
-                        server.sock.settimeout(SMTP_TIMEOUT)
-                    server.ehlo()
-                    server.starttls(context=context)
-                    server.ehlo()
-                    server.login(self.user, self.password)
-                    server.send_message(msg)
+                response = resend.Emails.send(params)
 
-                logger.info(f"Email sent successfully to {self.to_address}")
+                email_id = response.get("id") if isinstance(response, dict) else None
+
+                logger.info(f"Email sent successfully to {self.to_address}, id={email_id}")
                 return EmailResult(
                     success=True,
                     message="Email sent successfully",
                     attempts=attempt + 1,
+                    email_id=email_id,
                 )
 
-            except smtplib.SMTPAuthenticationError as e:
-                # Don't retry auth errors
-                logger.error(f"SMTP authentication failed: {e}")
-                return EmailResult(
-                    success=False,
-                    message=f"Authentication failed: {e}",
-                    attempts=attempt + 1,
+            except resend.exceptions.ResendError as e:
+                # Check for non-retryable errors
+                error_str = str(e).lower()
+                if "invalid" in error_str or "unauthorized" in error_str:
+                    logger.error(f"Resend API error (non-retryable): {e}")
+                    return EmailResult(
+                        success=False,
+                        message=f"API error: {e}",
+                        attempts=attempt + 1,
+                    )
+
+                last_error = e
+                logger.warning(
+                    f"Email send attempt {attempt + 1}/{MAX_RETRIES} failed: {e}"
                 )
 
-            except smtplib.SMTPRecipientsRefused as e:
-                # Don't retry recipient errors
-                logger.error(f"Recipient refused: {e}")
-                return EmailResult(
-                    success=False,
-                    message=f"Recipient refused: {e}",
-                    attempts=attempt + 1,
-                )
+                if attempt < MAX_RETRIES - 1:
+                    delay = RETRY_DELAYS[attempt]
+                    logger.info(f"Retrying in {delay}s...")
+                    time.sleep(delay)
 
-            except (smtplib.SMTPException, OSError, TimeoutError) as e:
+            except Exception as e:
                 last_error = e
                 logger.warning(
                     f"Email send attempt {attempt + 1}/{MAX_RETRIES} failed: {e}"
@@ -210,10 +176,10 @@ class EmailService:
         Returns:
             EmailResult with success status
         """
-        if not self.user or not self.password:
+        if not self.api_key:
             return EmailResult(
                 success=False,
-                message="SMTP credentials not configured",
+                message="Resend API key not configured",
             )
 
         # Validate subject length
@@ -231,13 +197,11 @@ class EmailService:
                 message=f"Email too large ({total_size} > {MAX_EMAIL_SIZE_BYTES} bytes)",
             )
 
-        msg = self._create_message(
+        return self._send_with_retry(
             subject=subject,
             html_content=html_content,
             plain_content=plain_content,
         )
-
-        return self._send_with_retry(msg)
 
     def send_test_email(self) -> EmailResult:
         """
@@ -247,7 +211,7 @@ class EmailService:
             EmailResult with success status
         """
         subject = "YouTube Digest - Test Email"
-        html_content = """
+        html_content = f"""
         <!DOCTYPE html>
         <html>
         <head><meta charset="utf-8"></head>
@@ -255,34 +219,29 @@ class EmailService:
             <h1 style="color: #17214B;">YouTube Digest Test</h1>
             <p>Dies ist eine Test-E-Mail vom YouTube Digest System.</p>
             <p style="color: #22c55e; font-weight: bold;">
-                ✓ SMTP-Verbindung funktioniert!
+                ✓ Resend API funktioniert!
             </p>
             <hr style="border: 1px solid #e5e5e5; margin: 20px 0;">
             <p style="color: #737373; font-size: 12px;">
-                Gesendet von: {from_addr}<br>
-                An: {to_addr}<br>
-                Server: {host}:{port}
+                Gesendet von: {self.from_address}<br>
+                An: {self.to_address}<br>
+                Service: Resend API
             </p>
         </body>
         </html>
-        """.format(
-            from_addr=self.from_address,
-            to_addr=self.to_address,
-            host=self.host,
-            port=self.port,
-        )
+        """
 
         plain_content = f"""
 YouTube Digest Test
 
 Dies ist eine Test-E-Mail vom YouTube Digest System.
 
-✓ SMTP-Verbindung funktioniert!
+✓ Resend API funktioniert!
 
 ---
 Gesendet von: {self.from_address}
 An: {self.to_address}
-Server: {self.host}:{self.port}
+Service: Resend API
         """.strip()
 
         logger.info("Sending test email...")
@@ -294,47 +253,40 @@ Server: {self.host}:{self.port}
 
     def test_connection(self) -> EmailResult:
         """
-        Test SMTP connection without sending an email.
+        Test Resend API connection by checking API key validity.
 
         Returns:
             EmailResult with success status
         """
-        if not self.user or not self.password:
+        if not self.api_key:
             return EmailResult(
                 success=False,
-                message="SMTP credentials not configured",
+                message="Resend API key not configured",
             )
 
         try:
-            logger.info(f"Testing SMTP connection to {self.host}:{self.port}")
+            logger.info("Testing Resend API connection...")
 
-            context = ssl.create_default_context()
+            # Try to list domains to verify API key works
+            # This is a lightweight call that verifies auth
+            resend.api_key = self.api_key
+            domains = resend.Domains.list()
 
-            with smtplib.SMTP(self.host, self.port, timeout=SMTP_TIMEOUT) as server:
-                # Set socket timeout for all operations after connect
-                if server.sock:
-                    server.sock.settimeout(SMTP_TIMEOUT)
-                server.ehlo()
-                server.starttls(context=context)
-                server.ehlo()
-                server.login(self.user, self.password)
-                # Don't send anything, just verify connection
-
-            logger.info("SMTP connection test successful")
+            logger.info("Resend API connection test successful")
             return EmailResult(
                 success=True,
-                message=f"Connection to {self.host}:{self.port} successful",
+                message=f"Resend API connection successful ({len(domains.get('data', []))} domains configured)",
             )
 
-        except smtplib.SMTPAuthenticationError as e:
-            logger.error(f"SMTP authentication failed: {e}")
+        except resend.exceptions.ResendError as e:
+            logger.error(f"Resend API connection failed: {e}")
             return EmailResult(
                 success=False,
-                message=f"Authentication failed: {e}",
+                message=f"API connection failed: {e}",
             )
 
-        except (smtplib.SMTPException, OSError, TimeoutError) as e:
-            logger.error(f"SMTP connection failed: {e}")
+        except Exception as e:
+            logger.error(f"Resend API connection failed: {e}")
             return EmailResult(
                 success=False,
                 message=f"Connection failed: {e}",
@@ -352,7 +304,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--test-connection",
         action="store_true",
-        help="Test SMTP connection only",
+        help="Test Resend API connection",
     )
     parser.add_argument(
         "--send-test",
@@ -375,7 +327,7 @@ if __name__ == "__main__":
         service.to_address = args.to
 
     if args.test_connection:
-        print(f"Testing connection to {service.host}:{service.port}...")
+        print("Testing Resend API connection...")
         result = service.test_connection()
         print(f"\n{'✓' if result.success else '✗'} {result.message}")
 
@@ -383,11 +335,13 @@ if __name__ == "__main__":
         print(f"Sending test email to {service.to_address}...")
         result = service.send_test_email()
         print(f"\n{'✓' if result.success else '✗'} {result.message}")
+        if result.email_id:
+            print(f"  Email ID: {result.email_id}")
         if result.attempts > 1:
             print(f"  (took {result.attempts} attempts)")
 
     else:
         print("Usage:")
-        print("  --test-connection  Test SMTP connection")
+        print("  --test-connection  Test Resend API connection")
         print("  --send-test        Send a test email")
         print("  --to EMAIL         Override recipient")

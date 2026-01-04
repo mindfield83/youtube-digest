@@ -34,8 +34,8 @@ google-genai>=1.0.0
 httpx>=0.26.0
 requests>=2.31.0
 
-# Email
-aiosmtplib>=3.0.1
+# Email (Resend API)
+resend>=2.0.0
 
 # Configuration
 pydantic>=2.5.3

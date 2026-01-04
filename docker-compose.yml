@@ -26,12 +26,9 @@ services:
       - YOUTUBE_TOKEN_PATH=/app/credentials/youtube_token.json
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SUPADATA_API_KEY=${SUPADATA_API_KEY}
-      - SMTP_HOST=${SMTP_HOST:-mail.mindfield.de}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASSWORD=${SMTP_PASSWORD}
-      - SMTP_FROM_ADDRESS=${SMTP_FROM_ADDRESS:-digest@mindfield.de}
-      - SMTP_TO_ADDRESS=${SMTP_TO_ADDRESS:-niko.huebner@gmail.com}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-YouTube Digest <digest@resend.dev>}
+      - EMAIL_TO_ADDRESS=${EMAIL_TO_ADDRESS:-niko.huebner@gmail.com}
       - APP_ENV=production
       - LOG_LEVEL=INFO
     volumes:
@@ -68,12 +65,9 @@ services:
       - YOUTUBE_TOKEN_PATH=/app/credentials/youtube_token.json
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SUPADATA_API_KEY=${SUPADATA_API_KEY}
-      - SMTP_HOST=${SMTP_HOST:-mail.mindfield.de}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASSWORD=${SMTP_PASSWORD}
-      - SMTP_FROM_ADDRESS=${SMTP_FROM_ADDRESS:-digest@mindfield.de}
-      - SMTP_TO_ADDRESS=${SMTP_TO_ADDRESS:-niko.huebner@gmail.com}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-YouTube Digest <digest@resend.dev>}
+      - EMAIL_TO_ADDRESS=${EMAIL_TO_ADDRESS:-niko.huebner@gmail.com}
     volumes:
       - ./credentials:/app/credentials:ro
     depends_on:
