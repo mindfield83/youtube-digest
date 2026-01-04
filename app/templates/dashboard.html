@@ -1,0 +1,126 @@
+<!-- app/templates/dashboard.html -->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - Dashboard</title>
+    <link rel="stylesheet" href="/static/dashboard.css">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1>
+                <span class="logo">&#9654;</span>
+                YouTube Digest
+            </h1>
+            <span class="version">v{{ version }}</span>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Status Cards -->
+        <section class="status-section" hx-get="/api/status" hx-trigger="load, every 30s" hx-swap="innerHTML">
+            <div class="loading">Loading status...</div>
+        </section>
+
+        <!-- Actions -->
+        <section class="actions-section">
+            <h2>Actions</h2>
+            <div class="actions-grid">
+                <button
+                    class="btn btn-primary"
+                    hx-post="/api/trigger-digest"
+                    hx-swap="none"
+                    hx-on::after-request="alert('Digest generation started!')"
+                >
+                    Generate Digest Now
+                </button>
+                <a href="/api/oauth/status" class="btn btn-secondary" target="_blank">
+                    Check OAuth Status
+                </a>
+            </div>
+        </section>
+
+        <!-- Tabs -->
+        <nav class="tabs">
+            <button class="tab active" data-tab="videos">Videos</button>
+            <button class="tab" data-tab="channels">Channels</button>
+            <button class="tab" data-tab="digests">Digest History</button>
+        </nav>
+
+        <!-- Videos Tab -->
+        <section id="videos-tab" class="tab-content active">
+            <div class="filters">
+                <select id="category-filter" onchange="filterVideos()">
+                    <option value="">All Categories</option>
+                    <option value="Claude Code">Claude Code</option>
+                    <option value="Coding/AI Allgemein">Coding/AI</option>
+                    <option value="Brettspiele">Brettspiele</option>
+                    <option value="Gesundheit">Gesundheit</option>
+                    <option value="Sport">Sport</option>
+                    <option value="Beziehung/Sexualität">Beziehung</option>
+                    <option value="Beachvolleyball">Beachvolleyball</option>
+                    <option value="Sonstige">Sonstige</option>
+                </select>
+                <select id="status-filter" onchange="filterVideos()">
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="processing">Processing</option>
+                    <option value="completed">Completed</option>
+                    <option value="failed">Failed</option>
+                </select>
+            </div>
+            <div id="videos-list" hx-get="/api/videos" hx-trigger="load" hx-swap="innerHTML">
+                <div class="loading">Loading videos...</div>
+            </div>
+        </section>
+
+        <!-- Channels Tab -->
+        <section id="channels-tab" class="tab-content">
+            <div id="channels-list" hx-get="/api/channels" hx-trigger="load" hx-swap="innerHTML">
+                <div class="loading">Loading channels...</div>
+            </div>
+        </section>
+
+        <!-- Digests Tab -->
+        <section id="digests-tab" class="tab-content">
+            <div id="digests-list" hx-get="/api/digests" hx-trigger="load" hx-swap="innerHTML">
+                <div class="loading">Loading digest history...</div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Mindfield Biosystems - YouTube Digest v{{ version }}</p>
+        </div>
+    </footer>
+
+    <script>
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
+            });
+        });
+
+        // Filter videos
+        function filterVideos() {
+            const category = document.getElementById('category-filter').value;
+            const status = document.getElementById('status-filter').value;
+
+            let url = '/api/videos?';
+            if (category) url += `category=${encodeURIComponent(category)}&`;
+            if (status) url += `status=${encodeURIComponent(status)}&`;
+
+            htmx.ajax('GET', url, '#videos-list');
+        }
+    </script>
+</body>
+</html>
