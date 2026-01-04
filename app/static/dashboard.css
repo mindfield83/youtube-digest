@@ -68,6 +68,11 @@ body {
     font-size: 1.2rem;
 }
 
+.header-logo {
+    height: 24px;
+    width: auto;
+}
+
 .version {
     background: rgba(255, 255, 255, 0.1);
     padding: 4px 12px;
@@ -86,6 +91,7 @@ main {
    Status Section - Compact Two-Line Layout
    ============================================================================ */
 .status-section {
+    margin-top: 10px;
     margin-bottom: 30px;
 }
 
