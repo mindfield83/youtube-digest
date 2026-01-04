@@ -289,8 +289,10 @@ class TranscriptService:
             response.raise_for_status()
             data = response.json()
 
-            # Supadata returns {"content": [{"text": "...", "start": 0, ...}]}
-            # or {"text": "..."} for text-only mode
+            # Supadata returns different formats:
+            # 1. {"text": "..."} for text-only mode
+            # 2. {"content": "..."} as string when text=true
+            # 3. {"content": [{"text": "...", "start": 0, ...}]} as segments list
             if "text" in data:
                 return TranscriptResult(
                     video_id=video_id,
@@ -300,15 +302,26 @@ class TranscriptService:
                     segments=None,
                 )
 
-            content = data.get("content", [])
+            content = data.get("content")
             if content:
-                return TranscriptResult(
-                    video_id=video_id,
-                    text=format_transcript_plain(content),
-                    language=data.get("lang", "unknown"),
-                    source="supadata",
-                    segments=content,
-                )
+                # Check if content is a string (text=true response)
+                if isinstance(content, str):
+                    return TranscriptResult(
+                        video_id=video_id,
+                        text=content,
+                        language=data.get("lang", "unknown"),
+                        source="supadata",
+                        segments=None,
+                    )
+                # Otherwise it's a list of segments
+                elif isinstance(content, list):
+                    return TranscriptResult(
+                        video_id=video_id,
+                        text=format_transcript_plain(content),
+                        language=data.get("lang", "unknown"),
+                        source="supadata",
+                        segments=content,
+                    )
 
             return None
 
