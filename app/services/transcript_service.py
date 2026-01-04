@@ -345,11 +345,15 @@ class TranscriptService:
         include_timestamps: bool = False,
     ) -> TranscriptResult:
         """
-        Get transcript for a video, trying YouTube first, then Supadata.
+        Get transcript for a video, trying Supadata first, then YouTube.
+
+        Priority order:
+        1. Supadata API (reliable, works from any IP)
+        2. YouTube transcript API (may be blocked on VPS IPs)
 
         Args:
             video_id: YouTube video ID
-            use_fallback: Whether to try Supadata if YouTube fails
+            use_fallback: Whether to try YouTube if Supadata fails
             include_timestamps: Whether to include timestamps in text
 
         Returns:
@@ -358,30 +362,33 @@ class TranscriptService:
         Raises:
             TranscriptNotAvailable: If no transcript could be obtained
         """
-        # Try YouTube first
-        result = self.get_transcript_youtube(video_id)
+        # Try Supadata first (reliable from VPS IPs)
+        if self.supadata_api_key:
+            logger.info(f"Trying Supadata for {video_id}")
+            try:
+                result = self.get_transcript_supadata(video_id)
+                if result:
+                    logger.info(
+                        f"Got transcript for {video_id} from Supadata "
+                        f"({result.word_count} words, {result.language})"
+                    )
 
-        if result:
-            logger.info(
-                f"Got transcript for {video_id} from {result.source} "
-                f"({result.word_count} words, {result.language})"
-            )
+                    if include_timestamps and result.segments:
+                        result.text = format_transcript_with_timestamps(result.segments)
 
-            # Format with timestamps if requested and segments available
-            if include_timestamps and result.segments:
-                result.text = format_transcript_with_timestamps(result.segments)
+                    return result
+            except SupadataError as e:
+                logger.warning(f"Supadata error for {video_id}: {e}")
 
-            return result
-
-        # Try Supadata fallback
+        # Try YouTube as fallback (may be blocked on VPS IPs)
         if use_fallback:
-            logger.info(f"Trying Supadata fallback for {video_id}")
-            result = self.get_transcript_supadata(video_id)
+            logger.info(f"Trying YouTube transcript API for {video_id}")
+            result = self.get_transcript_youtube(video_id)
 
             if result:
                 logger.info(
-                    f"Got transcript for {video_id} from Supadata "
-                    f"({result.word_count} words)"
+                    f"Got transcript for {video_id} from {result.source} "
+                    f"({result.word_count} words, {result.language})"
                 )
 
                 if include_timestamps and result.segments:
