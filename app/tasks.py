@@ -294,7 +294,7 @@ def generate_and_send_digest(
                 category_counts=digest_result.category_counts,
                 email_status="pending",
                 trigger_reason=trigger_reason,
-                recipient_email=settings.smtp_to_address,
+                recipient_email=settings.email_to_address,
             )
             db.add(digest_history)
             db.flush()

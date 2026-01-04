@@ -219,9 +219,11 @@ class TestTranscriptService:
 
     def test_get_transcript_supadata_no_api_key(self):
         """Should return None when API key not configured."""
-        service = TranscriptService(supadata_api_key="")
-        result = service.get_transcript_supadata("test_video")
-        assert result is None
+        with patch("app.services.transcript_service.settings") as mock_settings:
+            mock_settings.supadata_api_key = ""
+            service = TranscriptService(supadata_api_key="")
+            result = service.get_transcript_supadata("test_video")
+            assert result is None
 
     def test_get_transcript_youtube_first(self, service):
         """Should try YouTube before Supadata."""

@@ -46,15 +46,29 @@ def client(mock_db):
 class TestHealthEndpoint:
     """Tests for /health endpoint."""
 
-    def test_health_returns_200(self, client):
+    @patch("redis.from_url")
+    @patch("app.api.routes.celery_app")
+    def test_health_returns_200(self, mock_celery, mock_redis, client):
         """Health endpoint should return 200."""
+        # Mock Redis to avoid connection error
+        mock_redis_client = MagicMock()
+        mock_redis_client.ping.return_value = True
+        mock_redis.return_value = mock_redis_client
+        mock_celery.control.ping.return_value = [{"worker1": {"ok": "pong"}}]
+
         response = client.get("/health")
         assert response.status_code == 200
 
+    @patch("redis.from_url")
     @patch("app.api.routes.celery_app")
-    def test_health_returns_status(self, mock_celery, client):
+    def test_health_returns_status(self, mock_celery, mock_redis, client):
         """Health endpoint should return status."""
+        # Mock Redis to avoid connection error
+        mock_redis_client = MagicMock()
+        mock_redis_client.ping.return_value = True
+        mock_redis.return_value = mock_redis_client
         mock_celery.control.ping.return_value = [{"worker1": {"ok": "pong"}}]
+
         response = client.get("/health")
         data = response.json()
         assert "status" in data
