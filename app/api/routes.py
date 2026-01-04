@@ -116,11 +116,14 @@ async def get_system_status(db: Session = Depends(get_db)):
         DigestHistory.email_status == "sent"
     ).order_by(DigestHistory.sent_at.desc()).first()
 
-    # OAuth status
-    oauth_token = db.query(OAuthToken).filter(
-        OAuthToken.service == "youtube"
-    ).first()
-    oauth_valid = oauth_token is not None and not oauth_token.is_expired
+    # OAuth status (from file, not database)
+    try:
+        from app.services.youtube_service import YouTubeService
+        service = YouTubeService()
+        creds = service._load_credentials()
+        oauth_valid = creds is not None and creds.valid and not creds.expired
+    except Exception:
+        oauth_valid = False
 
     # Total channels
     total_channels = db.query(Channel).filter(Channel.is_active == True).count()
@@ -416,22 +419,34 @@ async def get_task_status(task_id: str):
 
 
 @router.get("/api/oauth/status", tags=["OAuth"])
-async def get_oauth_status(db: Session = Depends(get_db)):
+async def get_oauth_status():
     """
     Get YouTube OAuth token status.
-    """
-    token = db.query(OAuthToken).filter(
-        OAuthToken.service == "youtube"
-    ).first()
 
-    if not token:
+    Reads token from file system (not database) since YouTubeService
+    uses file-based token storage.
+    """
+    from app.services.youtube_service import YouTubeService
+
+    try:
+        service = YouTubeService()
+        creds = service._load_credentials()
+
+        if not creds:
+            return {
+                "valid": False,
+                "message": "No OAuth token found. Run auth flow.",
+            }
+
+        return {
+            "valid": creds.valid and not creds.expired,
+            "expired": creds.expired,
+            "expiry": creds.expiry.isoformat() if creds.expiry else None,
+            "has_refresh_token": creds.refresh_token is not None,
+        }
+    except Exception as e:
+        logger.error(f"Error checking OAuth status: {e}")
         return {
             "valid": False,
-            "message": "No OAuth token found. Run auth flow.",
+            "message": f"Error checking token: {str(e)}",
         }
-
-    return {
-        "valid": not token.is_expired,
-        "expires_at": token.expires_at,
-        "last_refreshed": token.last_refreshed,
-    }
