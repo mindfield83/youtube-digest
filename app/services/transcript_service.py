@@ -275,7 +275,7 @@ class TranscriptService:
         try:
             response = self.http_client.get(
                 "/youtube/transcript",
-                params={"video_id": video_id, "text": "true"},
+                params={"videoId": video_id, "text": "true"},
             )
 
             if response.status_code == 404:
