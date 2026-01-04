@@ -175,7 +175,9 @@ class TranscriptService:
         languages = languages or PREFERRED_LANGUAGES
 
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            # youtube-transcript-api v1.x uses instance method
+            ytt_api = YouTubeTranscriptApi()
+            transcript_list = ytt_api.list(video_id)
 
             # Try manually created transcripts first
             for lang in languages:
