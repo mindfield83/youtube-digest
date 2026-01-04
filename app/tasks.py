@@ -406,7 +406,7 @@ def sync_channel_metadata(self, fetch_videos: bool = True) -> dict[str, Any]:
     """
     Synchronize channel metadata and optionally fetch videos.
 
-    Updates existing channels with current names and thumbnails from subscriptions.
+    Updates existing channels with current names, thumbnails, and descriptions.
     If fetch_videos=True, also retrieves videos (last 14 days OR 10 videos per channel).
 
     Args:
@@ -426,11 +426,20 @@ def sync_channel_metadata(self, fetch_videos: bool = True) -> dict[str, Any]:
         videos_queued = 0
 
         with SessionLocal() as db:
-            # Phase 1: Update channel metadata
+            # Phase 1: Get detailed channel info (including descriptions)
+            channel_ids = [sub["channel_id"] for sub in subscriptions if sub.get("channel_id")]
+            channel_details = youtube.get_channel_details(channel_ids)
+            details_map = {c["channel_id"]: c for c in channel_details}
+
+            # Phase 2: Update channel metadata
             for sub in subscriptions:
                 channel_id = sub["channel_id"]
                 channel_name = sub.get("channel_name", "Unknown")
                 thumbnail_url = sub.get("thumbnail_url")
+
+                # Get detailed info including description
+                details = details_map.get(channel_id, {})
+                description = details.get("description", "")
 
                 channel = db.query(Channel).filter(
                     Channel.channel_id == channel_id
@@ -443,16 +452,28 @@ def sync_channel_metadata(self, fetch_videos: bool = True) -> dict[str, Any]:
                         channel_name=channel_name,
                         channel_url=f"https://www.youtube.com/channel/{channel_id}",
                         thumbnail_url=thumbnail_url,
+                        description=description,
                         is_active=True,
                     )
                     db.add(channel)
                     channels_updated += 1
                     logger.info(f"Created channel: {channel_name}")
-                elif channel.channel_name != channel_name or channel.thumbnail_url != thumbnail_url:
-                    channel.channel_name = channel_name
-                    channel.thumbnail_url = thumbnail_url
-                    channels_updated += 1
-                    logger.info(f"Updated channel: {channel_name}")
+                else:
+                    # Check if anything changed
+                    changed = False
+                    if channel.channel_name != channel_name:
+                        channel.channel_name = channel_name
+                        changed = True
+                    if channel.thumbnail_url != thumbnail_url:
+                        channel.thumbnail_url = thumbnail_url
+                        changed = True
+                    if channel.description != description:
+                        channel.description = description
+                        changed = True
+
+                    if changed:
+                        channels_updated += 1
+                        logger.info(f"Updated channel: {channel_name}")
 
             db.commit()
 

@@ -3,6 +3,41 @@
 Alle wichtigen Änderungen werden hier dokumentiert.
 Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
+## [1.2.0] - 2026-01-04
+
+### Hinzugefügt
+
+#### Security
+- **robots.txt**: Blockiert Web-Crawler vom privaten Dashboard
+- **llms.txt**: Informiert AI-Crawler über private Inhalte
+- **HTTP Basic Auth**: Optionale Authentifizierung für Dashboard und API
+  - Konfigurierbar via `DASHBOARD_USERNAME` und `DASHBOARD_PASSWORD`
+  - Health-Endpoint bleibt ohne Auth für Docker/K8s-Healthchecks
+
+#### E-Mail Template Verbesserungen
+- **Breiteres Layout**: Container von 600px auf 800px verbreitert
+- **Video-Thumbnails**: YouTube-Thumbnails mit Play-Button Overlay
+- **Datum/Uhrzeit**: Veröffentlichungsdatum pro Video in der E-Mail
+
+#### Dashboard UX
+- **Pagination Navigation**: Prev/Next Buttons statt nur Seitenzahlen
+- **Sticky Filter-Leiste**: Filter bleiben beim Scrollen oben fixiert
+- **Größere Video-Karten**: Min-Width 450px, mehr Summary-Inhalt (300 chars, 4 Takeaways)
+
+#### Kanal-Features
+- **Channel Description**: Neues `description` Feld im Channel-Model
+- **YouTube-Import**: Kanal-Beschreibungen werden bei Sync importiert
+- **Manuelle Kategorie**: UI-Dropdown zum Setzen pro Kanal
+  - Neuer Endpoint: `POST /api/channels/{channel_id}/category`
+  - Überschreibt AI-Kategorisierung wenn gesetzt
+
+### Geändert
+- `sync_channel_metadata` Task lädt jetzt auch Channel-Descriptions
+- Video-Cards zeigen mehr Content (300 statt 150 Zeichen, 4 statt 2 Takeaways)
+- Pagination mit HTMX-Buttons für bessere Navigation
+
+---
+
 ## [1.1.0] - 2026-01-04
 
 ### Hinzugefügt

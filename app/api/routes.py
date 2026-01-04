@@ -30,6 +30,7 @@ from app.tasks import generate_and_send_digest, sync_channel_metadata
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+health_router = APIRouter()  # Separate router for health check (no auth)
 
 
 # ============================================================================
@@ -61,7 +62,7 @@ def _format_date(dt: Optional[datetime]) -> str:
 # ============================================================================
 
 
-@router.get("/health", response_model=HealthResponse, tags=["Health"])
+@health_router.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health_check(db: Session = Depends(get_db)):
     """
     Health check endpoint for Docker/Kubernetes.
@@ -437,19 +438,20 @@ async def get_videos_html(
         # Get thumbnail URL or use placeholder
         thumbnail = v.thumbnail_url or f"https://i.ytimg.com/vi/{v.video_id}/mqdefault.jpg"
 
-        # Extract summary preview if available
+        # Extract summary preview if available (larger: 300 chars, 4 takeaways)
         summary_html = ""
         if v.summary and v.processing_status == "completed":
             core_message = v.summary.get("core_message", "")
-            key_takeaways = v.summary.get("key_takeaways", [])[:2]
+            key_takeaways = v.summary.get("key_takeaways", [])[:4]  # 4 instead of 2
 
             if core_message:
-                # Truncate core message
-                core_preview = core_message[:150] + "..." if len(core_message) > 150 else core_message
+                # Truncate core message (300 chars instead of 150)
+                core_preview = core_message[:300] + "..." if len(core_message) > 300 else core_message
                 summary_html = f'<p>{core_preview}</p>'
 
                 if key_takeaways:
-                    takeaways_html = "".join(f"<li>{t[:80]}{'...' if len(t) > 80 else ''}</li>" for t in key_takeaways)
+                    # 120 chars per takeaway instead of 80
+                    takeaways_html = "".join(f"<li>{t[:120]}{'...' if len(t) > 120 else ''}</li>" for t in key_takeaways)
                     summary_html += f'<ul>{takeaways_html}</ul>'
 
         cards.append(f"""
@@ -474,14 +476,47 @@ async def get_videos_html(
 
     total_pages = (total + page_size - 1) // page_size
 
+    # Build pagination with Prev/Next buttons
+    # Query params for HTMX target
+    base_params = []
+    if category:
+        base_params.append(f"category={category}")
+    if status:
+        base_params.append(f"status={status}")
+    base_params.append(f"page_size={page_size}")
+    base_query = "&".join(base_params)
+
+    prev_disabled = "disabled" if page <= 1 else ""
+    next_disabled = "disabled" if page >= total_pages else ""
+    prev_page = max(1, page - 1)
+    next_page = min(total_pages, page + 1)
+
+    pagination_html = f"""
+    <div class="pagination-nav">
+        <button class="pagination-btn {prev_disabled}"
+                hx-get="/api/videos?{base_query}&page={prev_page}"
+                hx-target="#videos-content"
+                hx-swap="innerHTML"
+                {'disabled' if page <= 1 else ''}>
+            <i class="ph ph-caret-left"></i> Vorherige
+        </button>
+        <span class="pagination-info">Seite {page} von {total_pages}</span>
+        <button class="pagination-btn {next_disabled}"
+                hx-get="/api/videos?{base_query}&page={next_page}"
+                hx-target="#videos-content"
+                hx-swap="innerHTML"
+                {'disabled' if page >= total_pages else ''}>
+            Naechste <i class="ph ph-caret-right"></i>
+        </button>
+    </div>
+    """
+
     html = f"""
     <div class="table-info">Zeige {len(videos)} von {total} Videos</div>
     <div class="video-cards">
         {''.join(cards)}
     </div>
-    <div class="pagination">
-        Seite {page} von {total_pages}
-    </div>
+    {pagination_html}
     """
     return HTMLResponse(content=html)
 
@@ -489,10 +524,15 @@ async def get_videos_html(
 @router.get("/api/channels", response_class=HTMLResponse, tags=["HTMX Partials"])
 async def get_channels_html(db: Session = Depends(get_db)):
     """Return channels list as HTML partial for HTMX."""
+    from app.config import get_settings
+
     channels = db.query(Channel).filter(Channel.is_active == True).order_by(Channel.channel_name).all()
 
     if not channels:
         return HTMLResponse(content='<div class="empty-state">Keine Kanäle gefunden</div>')
+
+    settings = get_settings()
+    categories = settings.categories
 
     rows = []
     for c in channels:
@@ -502,6 +542,24 @@ async def get_channels_html(db: Session = Depends(get_db)):
         last_checked = _format_date(c.last_checked) if c.last_checked else "Nie"
         thumb = f'<img src="{c.thumbnail_url}" alt="" class="channel-thumb">' if c.thumbnail_url else ""
 
+        # Build category dropdown options
+        options = ['<option value="">-- Keine --</option>']
+        for cat in categories:
+            selected = 'selected' if c.manual_category == cat else ''
+            options.append(f'<option value="{cat}" {selected}>{cat}</option>')
+        options_html = ''.join(options)
+
+        # Category dropdown with HTMX
+        category_dropdown = f"""
+        <select class="category-select"
+                hx-post="/api/channels/{c.channel_id}/category"
+                hx-vals="js:{{category: event.target.value}}"
+                hx-swap="none"
+                hx-on::after-request="handleCategoryChange(event)">
+            {options_html}
+        </select>
+        """
+
         rows.append(f"""
         <tr>
             <td>{thumb}</td>
@@ -509,7 +567,7 @@ async def get_channels_html(db: Session = Depends(get_db)):
                 <a href="{c.channel_url}" target="_blank">{c.channel_name}</a>
             </td>
             <td>{video_count}</td>
-            <td>{c.manual_category or '-'}</td>
+            <td>{category_dropdown}</td>
             <td>{last_checked}</td>
         </tr>
         """)
@@ -599,6 +657,48 @@ async def get_digests_html(db: Session = Depends(get_db)):
 # ============================================================================
 # Channel Sync & Test Email
 # ============================================================================
+
+
+@router.post("/api/channels/{channel_id}/category", tags=["Channels"])
+async def set_channel_category(
+    channel_id: str,
+    category: Optional[str] = Query(None, description="Category name or empty to clear"),
+    db: Session = Depends(get_db),
+):
+    """
+    Set or clear manual category override for a channel.
+
+    When set, videos from this channel will use the manual category
+    instead of AI-based categorization.
+    """
+    from app.config import get_settings
+
+    channel = db.query(Channel).filter(Channel.channel_id == channel_id).first()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    settings = get_settings()
+
+    # Validate category if provided
+    if category and category not in settings.categories:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid category. Valid options: {', '.join(settings.categories)}"
+        )
+
+    # Set or clear category
+    channel.manual_category = category if category else None
+    db.commit()
+
+    action = f"auf '{category}' gesetzt" if category else "entfernt"
+    logger.info(f"Manual category for {channel.channel_name} {action}")
+
+    return {
+        "success": True,
+        "channel_id": channel_id,
+        "manual_category": channel.manual_category,
+        "message": f"Kategorie {action}",
+    }
 
 
 @router.post("/api/channels/sync", tags=["Channels"])

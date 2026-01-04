@@ -1,16 +1,18 @@
 # app/main.py
 """FastAPI application for YouTube Digest."""
 import logging
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import __version__
-from app.api.routes import router as api_router
+from app.api.routes import health_router, router as api_router
 from app.config import get_settings
 from app.models import init_db
 
@@ -22,6 +24,36 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
+
+# HTTP Basic Auth
+security = HTTPBasic()
+
+
+def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
+    """
+    Verify HTTP Basic Auth credentials.
+
+    If no password is configured, authentication is disabled.
+    """
+    if not settings.dashboard_password:
+        return True  # No password = no auth required
+
+    correct_username = secrets.compare_digest(
+        credentials.username.encode("utf8"),
+        settings.dashboard_username.encode("utf8"),
+    )
+    correct_password = secrets.compare_digest(
+        credentials.password.encode("utf8"),
+        settings.dashboard_password.encode("utf8"),
+    )
+
+    if not (correct_username and correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return True
 
 
 @asynccontextmanager
@@ -57,17 +89,37 @@ if static_path.exists():
 templates_path = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=templates_path)
 
-# Include API routes
-app.include_router(api_router)
+# Include health router (no auth - for Docker/Kubernetes health checks)
+app.include_router(health_router)
+
+# Include API routes (with auth dependency for protected routes)
+app.include_router(api_router, dependencies=[Depends(verify_credentials)])
 
 
 # ============================================================================
-# Dashboard Route
+# Static Files (robots.txt, llms.txt) - No Auth Required
+# ============================================================================
+
+
+@app.get("/robots.txt", tags=["Static"])
+async def robots_txt():
+    """Serve robots.txt to block crawlers."""
+    return FileResponse(static_path / "robots.txt", media_type="text/plain")
+
+
+@app.get("/llms.txt", tags=["Static"])
+async def llms_txt():
+    """Serve llms.txt to inform AI crawlers."""
+    return FileResponse(static_path / "llms.txt", media_type="text/plain")
+
+
+# ============================================================================
+# Dashboard Route (Auth Protected)
 # ============================================================================
 
 
 @app.get("/", response_class=HTMLResponse, tags=["Dashboard"])
-async def dashboard(request: Request):
+async def dashboard(request: Request, _auth: bool = Depends(verify_credentials)):
     """
     Render the main dashboard page.
     """
@@ -82,7 +134,9 @@ async def dashboard(request: Request):
 
 
 @app.get("/video/{video_id}", response_class=HTMLResponse, tags=["Dashboard"])
-async def video_detail(request: Request, video_id: str):
+async def video_detail(
+    request: Request, video_id: str, _auth: bool = Depends(verify_credentials)
+):
     """
     Render video detail page with full summary.
     """

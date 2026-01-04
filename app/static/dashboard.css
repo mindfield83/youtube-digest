@@ -304,12 +304,22 @@ main {
 }
 
 /* ============================================================================
-   Filters
+   Filters (Sticky)
    ============================================================================ */
 .filters {
     display: flex;
     gap: 15px;
     margin-bottom: 20px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--mindfield-light);
+    padding: 12px 0;
+    margin-left: -20px;
+    margin-right: -20px;
+    padding-left: 20px;
+    padding-right: 20px;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .filters select {
@@ -491,11 +501,84 @@ main {
     font-size: 0.9rem;
 }
 
+/* ============================================================================
+   Pagination Navigation (with buttons)
+   ============================================================================ */
+.pagination-nav {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    margin-top: 24px;
+    padding: 16px;
+    background: var(--mindfield-white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.pagination-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: var(--mindfield-blue);
+    color: var(--mindfield-white);
+    border: none;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background: #0f1633;
+    transform: translateY(-1px);
+}
+
+.pagination-btn:disabled,
+.pagination-btn.disabled {
+    background: var(--border-color);
+    color: var(--text-secondary);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.pagination-info {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--mindfield-blue);
+    min-width: 120px;
+    text-align: center;
+}
+
 .channel-thumb {
     width: 32px;
     height: 32px;
     border-radius: 50%;
     object-fit: cover;
+}
+
+/* Category Select Dropdown */
+.category-select {
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    background: var(--mindfield-white);
+    cursor: pointer;
+    min-width: 160px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.category-select:hover {
+    border-color: var(--mindfield-blue);
+}
+
+.category-select:focus {
+    outline: none;
+    border-color: var(--mindfield-blue);
+    box-shadow: 0 0 0 3px rgba(23, 33, 75, 0.1);
 }
 
 .empty-state {
@@ -711,12 +794,12 @@ main {
 }
 
 /* ============================================================================
-   Video Cards
+   Video Cards (Larger)
    ============================================================================ */
 .video-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+    gap: 24px;
 }
 
 .video-card {
@@ -728,8 +811,8 @@ main {
 }
 
 .video-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .video-card__thumbnail {
@@ -759,7 +842,7 @@ main {
 }
 
 .video-card__content {
-    padding: 16px;
+    padding: 20px;
 }
 
 .video-card__title {
@@ -799,7 +882,7 @@ main {
 .video-card__summary p {
     margin: 0 0 8px 0;
     display: -webkit-box;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 5;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }

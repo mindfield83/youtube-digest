@@ -265,6 +265,53 @@ class YouTubeService:
                 raise QuotaExceededError("YouTube API quota exceeded")
             raise YouTubeServiceError(f"Failed to get subscriptions: {e}")
 
+    def get_channel_details(self, channel_ids: list[str]) -> list[dict]:
+        """
+        Get detailed information for channels including description.
+
+        Args:
+            channel_ids: List of channel IDs (max 50 per call)
+
+        Returns:
+            List of channel detail dictionaries with id, name, description, thumbnail
+        """
+        if not channel_ids:
+            return []
+
+        all_channels = []
+
+        # API allows max 50 IDs per request
+        for i in range(0, len(channel_ids), 50):
+            batch = channel_ids[i : i + 50]
+
+            try:
+                request = self.youtube.channels().list(
+                    part="snippet,contentDetails",
+                    id=",".join(batch),
+                )
+                response = request.execute()
+
+                for item in response.get("items", []):
+                    snippet = item.get("snippet", {})
+                    all_channels.append(
+                        {
+                            "channel_id": item.get("id"),
+                            "channel_name": snippet.get("title"),
+                            "description": snippet.get("description", ""),
+                            "thumbnail_url": snippet.get("thumbnails", {})
+                            .get("default", {})
+                            .get("url"),
+                            "custom_url": snippet.get("customUrl"),
+                        }
+                    )
+
+            except HttpError as e:
+                if e.resp.status == 403 and "quotaExceeded" in str(e):
+                    raise QuotaExceededError("YouTube API quota exceeded")
+                logger.error(f"Failed to get channel details: {e}")
+
+        return all_channels
+
     def get_channel_upload_playlist_id(self, channel_id: str) -> Optional[str]:
         """
         Get the uploads playlist ID for a channel.

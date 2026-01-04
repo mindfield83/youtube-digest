@@ -192,6 +192,20 @@
             }
         }
 
+        // Category change handler
+        function handleCategoryChange(event) {
+            try {
+                const response = JSON.parse(event.detail.xhr.responseText);
+                if (response.success) {
+                    showToast(response.message, 'success');
+                } else {
+                    showToast(response.message || 'Kategorie-Änderung fehlgeschlagen', 'error');
+                }
+            } catch (e) {
+                showToast('Fehler beim Setzen der Kategorie', 'error');
+            }
+        }
+
         // Progress modal
         let progressPollingInterval = null;
         let currentTaskId = null;

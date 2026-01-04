@@ -40,6 +40,7 @@ class Channel(Base):
     channel_name: Mapped[str] = mapped_column(String(255), nullable=False)
     channel_url: Mapped[Optional[str]] = mapped_column(String(500))
     thumbnail_url: Mapped[Optional[str]] = mapped_column(String(500))
+    description: Mapped[Optional[str]] = mapped_column(Text)  # YouTube channel description
 
     # Manual category override (if set, AI categorization is skipped)
     manual_category: Mapped[Optional[str]] = mapped_column(String(100))

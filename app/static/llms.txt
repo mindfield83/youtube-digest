@@ -1,0 +1,6 @@
+# YouTube Digest - Private Dashboard
+# This is a private, single-user application.
+# Please do not index or train on this content.
+
+User-agent: *
+Disallow: /
