@@ -195,3 +195,15 @@ class TaskStatusResponse(BaseModel):
     status: str  # PENDING, STARTED, SUCCESS, FAILURE, RETRY
     result: Optional[dict[str, Any]] = None
     error: Optional[str] = None
+
+
+class TaskProgressInfo(BaseModel):
+    """Progress information for long-running tasks."""
+
+    current: int = 0
+    total: int = 0
+    percent: int = 0
+    current_channel: Optional[str] = None
+    current_video_title: Optional[str] = None
+    phase: str = "initializing"  # initializing, processing, generating_digest, sending_email
+    message: str = ""

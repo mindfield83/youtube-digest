@@ -33,17 +33,57 @@
             <div class="actions-grid">
                 <button
                     class="btn btn-primary"
-                    hx-post="/api/trigger-digest"
-                    hx-swap="none"
-                    hx-on::after-request="alert('Digest-Generierung wurde gestartet!')"
+                    id="digest-btn"
+                    onclick="triggerDigest()"
                 >
                     Digest jetzt erstellen
                 </button>
-                <a href="/api/oauth/status" class="btn btn-secondary" target="_blank">
+                <button
+                    class="btn btn-secondary"
+                    hx-post="/api/channels/sync"
+                    hx-swap="none"
+                    hx-on::after-request="showToast('Kanal-Synchronisierung gestartet')"
+                >
+                    Kanäle aktualisieren
+                </button>
+                <button
+                    class="btn btn-secondary"
+                    hx-post="/api/test-email"
+                    hx-swap="none"
+                    hx-on::after-request="handleTestEmailResponse(event)"
+                >
+                    Test-E-Mail senden
+                </button>
+                <a href="/api/oauth/status" class="btn btn-outline" target="_blank">
                     OAuth-Status prüfen
                 </a>
             </div>
         </section>
+
+        <!-- Progress Modal -->
+        <div id="progress-modal" class="modal" style="display: none;">
+            <div class="modal-backdrop" onclick="closeProgressModal()"></div>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Digest wird erstellt...</h3>
+                    <button class="modal-close" onclick="closeProgressModal()">&times;</button>
+                </div>
+                <div class="modal-body" id="progress-container">
+                    <div class="progress-content">
+                        <div class="progress-icon">
+                            <i class="ph-hourglass"></i>
+                        </div>
+                        <div class="progress-info">
+                            <div class="progress-message">Initialisiere...</div>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" style="width: 0%;"></div>
+                        </div>
+                        <div class="progress-percent">0%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Tabs -->
         <nav class="tabs">
@@ -122,6 +162,107 @@
             if (status) url += `status=${encodeURIComponent(status)}&`;
 
             htmx.ajax('GET', url, '#videos-list');
+        }
+
+        // Toast notifications
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Test email response handler
+        function handleTestEmailResponse(event) {
+            try {
+                const response = JSON.parse(event.detail.xhr.responseText);
+                if (response.success) {
+                    showToast(response.message, 'success');
+                } else {
+                    showToast(response.message, 'error');
+                }
+            } catch (e) {
+                showToast('Unbekannter Fehler', 'error');
+            }
+        }
+
+        // Progress modal
+        let progressPollingInterval = null;
+        let currentTaskId = null;
+
+        function openProgressModal() {
+            document.getElementById('progress-modal').style.display = 'flex';
+        }
+
+        function closeProgressModal() {
+            document.getElementById('progress-modal').style.display = 'none';
+            if (progressPollingInterval) {
+                clearInterval(progressPollingInterval);
+                progressPollingInterval = null;
+            }
+            currentTaskId = null;
+        }
+
+        async function triggerDigest() {
+            try {
+                const response = await fetch('/api/trigger-digest', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.status === 'skipped') {
+                    showToast(data.message, 'info');
+                    return;
+                }
+
+                if (data.task_id) {
+                    currentTaskId = data.task_id;
+                    openProgressModal();
+                    startProgressPolling(data.task_id);
+                }
+            } catch (e) {
+                showToast('Fehler beim Starten des Digests', 'error');
+            }
+        }
+
+        function startProgressPolling(taskId) {
+            // Initial fetch
+            updateProgress(taskId);
+
+            // Poll every 2 seconds
+            progressPollingInterval = setInterval(() => {
+                updateProgress(taskId);
+            }, 2000);
+        }
+
+        async function updateProgress(taskId) {
+            try {
+                const response = await fetch(`/api/tasks/${taskId}/progress`);
+                const html = await response.text();
+
+                document.getElementById('progress-container').innerHTML = html;
+
+                // Check for auto-close
+                const content = document.querySelector('#progress-container .progress-content');
+                if (content && content.dataset.autoClose) {
+                    const delay = parseInt(content.dataset.autoClose, 10);
+                    setTimeout(() => {
+                        closeProgressModal();
+                        // Refresh status bar
+                        htmx.ajax('GET', '/api/status', '.status-section');
+                    }, delay);
+                    if (progressPollingInterval) {
+                        clearInterval(progressPollingInterval);
+                        progressPollingInterval = null;
+                    }
+                }
+            } catch (e) {
+                console.error('Progress update failed:', e);
+            }
         }
     </script>
 </body>

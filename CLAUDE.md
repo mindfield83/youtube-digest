@@ -134,8 +134,9 @@ docker-compose logs -f worker
 |------|----------|--------------|
 | `check_for_new_videos` | Täglich 06:00 UTC | Prüft auf neue Videos |
 | `process_video` | On-demand | Transkript + Summary |
-| `generate_and_send_digest` | On-demand | Digest erstellen & senden |
+| `generate_and_send_digest` | On-demand | Digest erstellen & senden (mit Progress-Tracking) |
 | `check_digest_conditions` | Täglich 07:00 UTC | Prüft Trigger-Bedingungen (14 Tage / 10 Videos) |
+| `sync_channel_metadata` | On-demand | Aktualisiert Kanalnamen und Thumbnails |
 
 ## API Endpoints
 
@@ -143,11 +144,14 @@ docker-compose logs -f worker
 |----------|---------|--------------|
 | `/health` | GET | Healthcheck (DB + Celery) |
 | `/api/status` | GET | Dashboard Status Cards |
-| `/api/videos` | GET | Video-Liste mit Filtern |
+| `/api/videos` | GET | Video-Cards mit Filtern |
 | `/api/videos/{id}` | GET | Video-Detail |
 | `/api/channels` | GET | Kanal-Liste |
+| `/api/channels/sync` | POST | Kanal-Metadaten synchronisieren |
 | `/api/digests` | GET | Digest-Historie |
 | `/api/trigger-digest` | POST | Manueller Digest-Trigger |
+| `/api/tasks/{id}/progress` | GET | Task-Fortschritt (HTMX Partial) |
+| `/api/test-email` | POST | Test-E-Mail senden |
 | `/api/oauth/status` | GET | OAuth Token Status |
 
 ## Deployment

@@ -50,7 +50,7 @@ def check_for_new_videos(self) -> dict[str, Any]:
 
             for sub in subscriptions:
                 channel_id = sub["channel_id"]
-                channel_name = sub.get("title", "Unknown")
+                channel_name = sub.get("channel_name", "Unknown")
 
                 # Upsert channel in database
                 channel = db.query(Channel).filter(
@@ -62,7 +62,7 @@ def check_for_new_videos(self) -> dict[str, Any]:
                         channel_id=channel_id,
                         channel_name=channel_name,
                         channel_url=f"https://www.youtube.com/channel/{channel_id}",
-                        thumbnail_url=sub.get("thumbnail"),
+                        thumbnail_url=sub.get("thumbnail_url"),
                         is_active=True,
                     )
                     db.add(channel)
@@ -253,6 +253,18 @@ def generate_and_send_digest(
     """
     logger.info(f"Generating digest (trigger: {trigger_reason})")
 
+    # Update progress: initializing
+    self.update_state(
+        state="PROGRESS",
+        meta={
+            "phase": "initializing",
+            "current": 0,
+            "total": 0,
+            "percent": 5,
+            "message": "Lade Videos...",
+        }
+    )
+
     try:
         with SessionLocal() as db:
             # Get videos not yet included in any digest
@@ -271,18 +283,56 @@ def generate_and_send_digest(
                     "video_count": 0,
                 }
 
+            total_videos = len(videos)
+
+            # Update progress: videos loaded
+            self.update_state(
+                state="PROGRESS",
+                meta={
+                    "phase": "processing",
+                    "current": 0,
+                    "total": total_videos,
+                    "percent": 10,
+                    "message": f"{total_videos} Videos gefunden",
+                }
+            )
+
             # Determine period
             period_end = datetime.now(timezone.utc)
             period_start = min(v.published_at for v in videos if v.published_at)
             if not period_start:
                 period_start = period_end - timedelta(days=14)
 
+            # Update progress: generating digest
+            self.update_state(
+                state="PROGRESS",
+                meta={
+                    "phase": "generating_digest",
+                    "current": 0,
+                    "total": total_videos,
+                    "percent": 50,
+                    "message": "Generiere Digest...",
+                }
+            )
+
             # Generate digest
             generator = DigestGenerator()
-            digest_result = generator.generate_digest(
+            digest_result = generator.generate(
                 videos=videos,
                 period_start=period_start,
                 period_end=period_end,
+            )
+
+            # Update progress: digest generated
+            self.update_state(
+                state="PROGRESS",
+                meta={
+                    "phase": "generating_digest",
+                    "current": total_videos,
+                    "total": total_videos,
+                    "percent": 70,
+                    "message": f"Digest mit {digest_result.video_count} Videos erstellt",
+                }
             )
 
             # Create digest history record
@@ -298,6 +348,18 @@ def generate_and_send_digest(
             )
             db.add(digest_history)
             db.flush()
+
+            # Update progress: sending email
+            self.update_state(
+                state="PROGRESS",
+                meta={
+                    "phase": "sending_email",
+                    "current": total_videos,
+                    "total": total_videos,
+                    "percent": 85,
+                    "message": "Sende E-Mail...",
+                }
+            )
 
             # Send email
             email_service = EmailService()
@@ -337,3 +399,54 @@ def generate_and_send_digest(
     except Exception as e:
         logger.error(f"Error generating digest: {e}")
         raise self.retry(exc=e, countdown=300, max_retries=2)
+
+
+@celery_app.task(bind=True, name="app.tasks.sync_channel_metadata")
+def sync_channel_metadata(self) -> dict[str, Any]:
+    """
+    Synchronize channel metadata (names, thumbnails) from YouTube API.
+
+    Updates existing channels with current names and thumbnails from subscriptions.
+
+    Returns:
+        dict with status, channels_updated count
+    """
+    logger.info("Starting channel metadata sync")
+
+    try:
+        youtube = YouTubeService()
+        subscriptions = youtube.get_subscriptions()
+
+        channels_updated = 0
+
+        with SessionLocal() as db:
+            for sub in subscriptions:
+                channel_id = sub["channel_id"]
+                channel_name = sub.get("channel_name", "Unknown")
+                thumbnail_url = sub.get("thumbnail_url")
+
+                channel = db.query(Channel).filter(
+                    Channel.channel_id == channel_id
+                ).first()
+
+                if channel:
+                    # Update metadata if changed
+                    if channel.channel_name != channel_name or channel.thumbnail_url != thumbnail_url:
+                        channel.channel_name = channel_name
+                        channel.thumbnail_url = thumbnail_url
+                        channels_updated += 1
+                        logger.info(f"Updated channel: {channel_name}")
+
+            db.commit()
+
+        result = {
+            "status": "completed",
+            "channels_updated": channels_updated,
+            "total_subscriptions": len(subscriptions),
+        }
+        logger.info(f"Channel sync complete: {result}")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error in sync_channel_metadata: {e}")
+        raise self.retry(exc=e, countdown=60, max_retries=2)

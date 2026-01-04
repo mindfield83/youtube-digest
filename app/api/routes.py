@@ -25,7 +25,7 @@ from app.api.schemas import (
 )
 from app.celery_app import celery_app
 from app.models import Channel, DigestHistory, OAuthToken, ProcessedVideo, get_db
-from app.tasks import generate_and_send_digest
+from app.tasks import generate_and_send_digest, sync_channel_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -418,54 +418,67 @@ async def get_videos_html(
 
     # Status translations
     status_labels = {
-        "pending": ("⏳", "Ausstehend"),
-        "processing": ("⚙️", "In Bearbeitung"),
-        "completed": ("✅", "Abgeschlossen"),
-        "failed": ("❌", "Fehlgeschlagen"),
+        "pending": ("⏳", "Ausstehend", "pending"),
+        "processing": ("⚙️", "In Bearbeitung", "processing"),
+        "completed": ("✅", "Abgeschlossen", "completed"),
+        "failed": ("❌", "Fehlgeschlagen", "failed"),
     }
 
-    rows = []
+    cards = []
     for v in videos:
         channel_name = channel_map.get(v.channel_id, "Unbekannt")
-        status_icon, status_text = status_labels.get(v.processing_status, ("❓", v.processing_status))
+        status_icon, status_text, status_class = status_labels.get(
+            v.processing_status, ("❓", v.processing_status, "")
+        )
         duration = _format_duration(v.duration_seconds)
         pub_date = v.published_at.strftime("%d.%m.%Y") if v.published_at else "-"
         category_display = v.category or "Nicht kategorisiert"
 
-        rows.append(f"""
-        <tr>
-            <td>
-                <a href="https://youtube.com/watch?v={v.video_id}" target="_blank" title="{v.title}">
-                    {v.title[:50]}{'...' if len(v.title) > 50 else ''}
-                </a>
-            </td>
-            <td>{channel_name}</td>
-            <td>{duration}</td>
-            <td>{pub_date}</td>
-            <td><span class="category-badge">{category_display}</span></td>
-            <td title="{status_text}">{status_icon} {status_text}</td>
-        </tr>
+        # Get thumbnail URL or use placeholder
+        thumbnail = v.thumbnail_url or f"https://i.ytimg.com/vi/{v.video_id}/mqdefault.jpg"
+
+        # Extract summary preview if available
+        summary_html = ""
+        if v.summary and v.processing_status == "completed":
+            core_message = v.summary.get("core_message", "")
+            key_takeaways = v.summary.get("key_takeaways", [])[:2]
+
+            if core_message:
+                # Truncate core message
+                core_preview = core_message[:150] + "..." if len(core_message) > 150 else core_message
+                summary_html = f'<p>{core_preview}</p>'
+
+                if key_takeaways:
+                    takeaways_html = "".join(f"<li>{t[:80]}{'...' if len(t) > 80 else ''}</li>" for t in key_takeaways)
+                    summary_html += f'<ul>{takeaways_html}</ul>'
+
+        cards.append(f"""
+        <article class="video-card">
+            <div class="video-card__thumbnail">
+                <img src="{thumbnail}" alt="" loading="lazy">
+                <span class="video-card__duration">{duration}</span>
+            </div>
+            <div class="video-card__content">
+                <h3 class="video-card__title">
+                    <a href="https://youtube.com/watch?v={v.video_id}" target="_blank">{v.title}</a>
+                </h3>
+                <div class="video-card__meta">{channel_name} | {pub_date}</div>
+                {f'<div class="video-card__summary">{summary_html}</div>' if summary_html else ''}
+                <div class="video-card__badges">
+                    <span class="category-badge">{category_display}</span>
+                    <span class="status-badge {status_class}">{status_icon} {status_text}</span>
+                </div>
+            </div>
+        </article>
         """)
 
     total_pages = (total + page_size - 1) // page_size
 
     html = f"""
     <div class="table-info">Zeige {len(videos)} von {total} Videos</div>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Titel</th>
-                <th>Kanal</th>
-                <th>Dauer</th>
-                <th>Veröffentlicht</th>
-                <th>Kategorie</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            {''.join(rows)}
-        </tbody>
-    </table>
+    <div class="video-cards">
+        {''.join(cards)}
+    </div>
     <div class="pagination">
         Seite {page} von {total_pages}
     </div>
@@ -580,4 +593,154 @@ async def get_digests_html(db: Session = Depends(get_db)):
         </tbody>
     </table>
     """
+    return HTMLResponse(content=html)
+
+
+# ============================================================================
+# Channel Sync & Test Email
+# ============================================================================
+
+
+@router.post("/api/channels/sync", tags=["Channels"])
+async def sync_channels():
+    """
+    Trigger channel metadata sync from YouTube API.
+
+    Updates channel names and thumbnails from current subscriptions.
+    """
+    task = sync_channel_metadata.delay()
+
+    logger.info(f"Channel sync triggered, task_id: {task.id}")
+
+    return {
+        "task_id": task.id,
+        "status": "queued",
+        "message": "Kanal-Synchronisierung gestartet",
+    }
+
+
+@router.post("/api/test-email", tags=["Email"])
+async def send_test_email():
+    """
+    Send a test email to verify Resend configuration.
+    """
+    from app.services.email_service import EmailService
+
+    try:
+        email_service = EmailService()
+        result = email_service.send_digest(
+            html_content="<h1>Test-E-Mail</h1><p>Dies ist eine Test-E-Mail von YouTube Digest.</p>",
+            plain_content="Test-E-Mail\n\nDies ist eine Test-E-Mail von YouTube Digest.",
+            subject="YouTube Digest - Test-E-Mail",
+        )
+
+        if result.success:
+            return {
+                "success": True,
+                "message": "Test-E-Mail erfolgreich gesendet",
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"E-Mail-Versand fehlgeschlagen: {result.message}",
+            }
+    except Exception as e:
+        logger.error(f"Test email failed: {e}")
+        return {
+            "success": False,
+            "message": f"Fehler: {str(e)}",
+        }
+
+
+# ============================================================================
+# Task Progress Tracking
+# ============================================================================
+
+
+@router.get("/api/tasks/{task_id}/progress", response_class=HTMLResponse, tags=["Tasks"])
+async def get_task_progress_html(task_id: str):
+    """
+    Get task progress as HTML partial for HTMX polling.
+
+    Returns progress modal content with current phase, progress bar, and status.
+    """
+    result = celery_app.AsyncResult(task_id)
+
+    status = result.status
+    meta = result.info if isinstance(result.info, dict) else {}
+
+    # Handle different states
+    if status == "PENDING":
+        phase = "initializing"
+        percent = 0
+        message = "Task wird vorbereitet..."
+        current_channel = None
+        current_video = None
+    elif status == "PROGRESS":
+        phase = meta.get("phase", "processing")
+        percent = meta.get("percent", 0)
+        message = meta.get("message", "Verarbeitung läuft...")
+        current_channel = meta.get("current_channel")
+        current_video = meta.get("current_video_title")
+    elif status == "SUCCESS":
+        phase = "completed"
+        percent = 100
+        message = "Digest erfolgreich erstellt und gesendet!"
+        current_channel = None
+        current_video = None
+    elif status == "FAILURE":
+        phase = "failed"
+        percent = 100
+        message = f"Fehler: {str(result.result)}"
+        current_channel = None
+        current_video = None
+    else:
+        phase = status.lower()
+        percent = meta.get("percent", 0) if isinstance(meta, dict) else 0
+        message = meta.get("message", f"Status: {status}") if isinstance(meta, dict) else f"Status: {status}"
+        current_channel = meta.get("current_channel") if isinstance(meta, dict) else None
+        current_video = meta.get("current_video_title") if isinstance(meta, dict) else None
+
+    # Phase icons
+    phase_icons = {
+        "initializing": "ph-hourglass",
+        "processing": "ph-gear",
+        "generating_digest": "ph-file-text",
+        "sending_email": "ph-envelope",
+        "completed": "ph-check-circle",
+        "failed": "ph-x-circle",
+    }
+    icon = phase_icons.get(phase, "ph-spinner")
+
+    # Phase colors
+    phase_colors = {
+        "completed": "#22c55e",
+        "failed": "#ef4444",
+    }
+    color = phase_colors.get(phase, "#17214B")
+
+    # Build HTML
+    channel_html = f'<div class="progress-channel">{current_channel}</div>' if current_channel else ""
+    video_html = f'<div class="progress-video">{current_video}</div>' if current_video else ""
+
+    # Auto-close attribute for completed/failed states
+    auto_close = 'data-auto-close="5000"' if phase in ("completed", "failed") else ""
+
+    html = f"""
+    <div class="progress-content" {auto_close}>
+        <div class="progress-icon" style="color: {color};">
+            <i class="{icon}"></i>
+        </div>
+        <div class="progress-info">
+            <div class="progress-message">{message}</div>
+            {channel_html}
+            {video_html}
+        </div>
+        <div class="progress-bar-container">
+            <div class="progress-bar" style="width: {percent}%;"></div>
+        </div>
+        <div class="progress-percent">{percent}%</div>
+    </div>
+    """
+
     return HTMLResponse(content=html)

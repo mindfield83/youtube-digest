@@ -3,9 +3,46 @@
 Alle wichtigen Änderungen werden hier dokumentiert.
 Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
-## [1.0.0] - 2026-01-04
+## [1.1.0] - 2026-01-04
 
 ### Hinzugefügt
+
+#### Dashboard-Verbesserungen
+- **Live-Progress-Tracking**: Modal mit Echtzeit-Fortschrittsanzeige bei Digest-Generierung
+  - Phase-Icons und Prozentanzeige
+  - HTMX-Polling alle 2 Sekunden
+  - Automatisches Schliessen nach Erfolg/Fehler
+- **Video-Cards**: Neues Card-Layout statt Tabelle
+  - Thumbnails mit Lazy Loading
+  - Vollstaendiger Titel sichtbar
+  - Summary-Vorschau (core_message + key_takeaways)
+  - Kategorie- und Status-Badges
+- **Kanal-Sync Task**: `sync_channel_metadata` aktualisiert Kanalnamen von YouTube API
+- **Neue Dashboard-Buttons**:
+  - "Kanaele aktualisieren" - Triggert Kanal-Sync
+  - "Test-E-Mail senden" - Prueft Resend-Konfiguration
+- **Toast-Notifications**: Feedback-System fuer Benutzeraktionen
+- **Neuer API-Endpoint**: `GET /api/tasks/{task_id}/progress` fuer HTMX-Polling
+- **Neuer API-Endpoint**: `POST /api/channels/sync` fuer Kanal-Synchronisierung
+- **Neuer API-Endpoint**: `POST /api/test-email` fuer Test-E-Mail-Versand
+- **TaskProgressInfo Schema**: Pydantic Model fuer Progress-Tracking
+
+### Behoben
+
+#### Kritische Bug-Fixes
+- **E-Mail wird nicht gesendet**: `generate_digest()` -> `generate()` in tasks.py
+- **Kanaele zeigen "Unknown"**: Korrektes Feld-Mapping (`channel_name` statt `title`, `thumbnail_url` statt `thumbnail`)
+
+### Geaendert
+- `generate_and_send_digest` Task mit `update_state()` fuer Progress-Tracking
+- Video-Ansicht von Tabelle zu responsive Card-Grid
+- Erweiterte CSS-Styles (Modal, Progress, Toast, Video-Cards)
+
+---
+
+## [1.0.0] - 2026-01-04
+
+### Hinzugefuegt
 
 #### Production Deployment & Fixes
 - Docker Compose Deployment auf Contabo VPS
