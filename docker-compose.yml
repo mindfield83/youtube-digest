@@ -91,7 +91,6 @@ services:
       - REDIS_URL=redis://redis:6379/0
     volumes:
       - celerybeat_data:/var/run/celery
-    user: root
     depends_on:
       - worker
     networks:

@@ -44,8 +44,9 @@ ENV PYTHONDONTWRITEBYTECODE=1
 COPY --chown=appuser:appuser app/ ./app/
 COPY --chown=appuser:appuser tests/ ./tests/
 
-# Create directories for credentials and data
-RUN mkdir -p /app/credentials && chown appuser:appuser /app/credentials
+# Create directories for credentials, data, and celery beat schedule
+RUN mkdir -p /app/credentials /var/run/celery \
+    && chown appuser:appuser /app/credentials /var/run/celery
 
 # Switch to non-root user
 USER appuser
