@@ -43,6 +43,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Copy application code
 COPY --chown=appuser:appuser app/ ./app/
 COPY --chown=appuser:appuser tests/ ./tests/
+COPY --chown=appuser:appuser scripts/ ./scripts/
 
 # Create directories for credentials, data, and celery beat schedule
 RUN mkdir -p /app/credentials /var/run/celery \
