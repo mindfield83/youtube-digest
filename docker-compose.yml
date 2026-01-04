@@ -1,0 +1,165 @@
+# docker-compose.yml
+# YouTube Digest - Production Stack
+# ================================
+#
+# Services: FastAPI, Celery Worker, Celery Beat, PostgreSQL, Redis
+# Network: Connects to external caddy_gateway for reverse proxy
+
+version: "3.8"
+
+services:
+  # ==========================================================================
+  # FastAPI Application
+  # ==========================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: youtube-digest-app
+    restart: unless-stopped
+    ports:
+      - "8090:8000"
+    environment:
+      - DATABASE_URL=postgresql://youtube_digest:${POSTGRES_PASSWORD:-youtube_digest_secret}@db:5432/youtube_digest
+      - REDIS_URL=redis://redis:6379/0
+      - YOUTUBE_OAUTH_CREDENTIALS_PATH=/app/credentials/youtube_oauth.json
+      - YOUTUBE_TOKEN_PATH=/app/credentials/youtube_token.json
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SUPADATA_API_KEY=${SUPADATA_API_KEY}
+      - SMTP_HOST=${SMTP_HOST:-mail.mindfield.de}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM_ADDRESS=${SMTP_FROM_ADDRESS:-digest@mindfield.de}
+      - SMTP_TO_ADDRESS=${SMTP_TO_ADDRESS:-niko.huebner@gmail.com}
+      - APP_ENV=production
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./credentials:/app/credentials:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - youtube-digest-net
+      - caddy_gateway
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ==========================================================================
+  # Celery Worker
+  # ==========================================================================
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: youtube-digest-worker
+    restart: unless-stopped
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      - DATABASE_URL=postgresql://youtube_digest:${POSTGRES_PASSWORD:-youtube_digest_secret}@db:5432/youtube_digest
+      - REDIS_URL=redis://redis:6379/0
+      - YOUTUBE_OAUTH_CREDENTIALS_PATH=/app/credentials/youtube_oauth.json
+      - YOUTUBE_TOKEN_PATH=/app/credentials/youtube_token.json
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SUPADATA_API_KEY=${SUPADATA_API_KEY}
+      - SMTP_HOST=${SMTP_HOST:-mail.mindfield.de}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM_ADDRESS=${SMTP_FROM_ADDRESS:-digest@mindfield.de}
+      - SMTP_TO_ADDRESS=${SMTP_TO_ADDRESS:-niko.huebner@gmail.com}
+    volumes:
+      - ./credentials:/app/credentials:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - youtube-digest-net
+
+  # ==========================================================================
+  # Celery Beat Scheduler
+  # ==========================================================================
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: youtube-digest-beat
+    restart: unless-stopped
+    command: celery -A app.celery_app beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://youtube_digest:${POSTGRES_PASSWORD:-youtube_digest_secret}@db:5432/youtube_digest
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - celerybeat_data:/app
+    depends_on:
+      - worker
+    networks:
+      - youtube-digest-net
+
+  # ==========================================================================
+  # PostgreSQL Database
+  # ==========================================================================
+  db:
+    image: postgres:16-alpine
+    container_name: youtube-digest-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=youtube_digest
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-youtube_digest_secret}
+      - POSTGRES_DB=youtube_digest
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - youtube-digest-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U youtube_digest -d youtube_digest"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # Redis
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: youtube-digest-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - youtube-digest-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ==============================================================================
+# Volumes
+# ==============================================================================
+volumes:
+  postgres_data:
+    name: youtube-digest-postgres-data
+  redis_data:
+    name: youtube-digest-redis-data
+  celerybeat_data:
+    name: youtube-digest-celerybeat-data
+
+# ==============================================================================
+# Networks
+# ==============================================================================
+networks:
+  youtube-digest-net:
+    name: youtube-digest-net
+    driver: bridge
+  caddy_gateway:
+    external: true

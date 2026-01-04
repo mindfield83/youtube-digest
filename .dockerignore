@@ -1,0 +1,62 @@
+# .dockerignore
+# Exclude files not needed in Docker image
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+ENV/
+.eggs/
+*.egg-info/
+*.egg
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Build
+dist/
+build/
+*.manifest
+*.spec
+
+# Documentation
+docs/
+*.md
+!requirements.txt
+
+# Local config
+.env
+.env.*
+!.env.example
+
+# Credentials (mounted as volume)
+credentials/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.docker/
+
+# Misc
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
