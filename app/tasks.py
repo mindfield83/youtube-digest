@@ -402,24 +402,31 @@ def generate_and_send_digest(
 
 
 @celery_app.task(bind=True, name="app.tasks.sync_channel_metadata")
-def sync_channel_metadata(self) -> dict[str, Any]:
+def sync_channel_metadata(self, fetch_videos: bool = True) -> dict[str, Any]:
     """
-    Synchronize channel metadata (names, thumbnails) from YouTube API.
+    Synchronize channel metadata and optionally fetch videos.
 
     Updates existing channels with current names and thumbnails from subscriptions.
+    If fetch_videos=True, also retrieves videos (last 14 days OR 10 videos per channel).
+
+    Args:
+        fetch_videos: Whether to also fetch new videos from channels
 
     Returns:
-        dict with status, channels_updated count
+        dict with status, channels_updated, videos_found, videos_queued
     """
-    logger.info("Starting channel metadata sync")
+    logger.info(f"Starting channel sync (fetch_videos={fetch_videos})")
 
     try:
         youtube = YouTubeService()
         subscriptions = youtube.get_subscriptions()
 
         channels_updated = 0
+        new_videos_found = 0
+        videos_queued = 0
 
         with SessionLocal() as db:
+            # Phase 1: Update channel metadata
             for sub in subscriptions:
                 channel_id = sub["channel_id"]
                 channel_name = sub.get("channel_name", "Unknown")
@@ -429,13 +436,115 @@ def sync_channel_metadata(self) -> dict[str, Any]:
                     Channel.channel_id == channel_id
                 ).first()
 
-                if channel:
-                    # Update metadata if changed
-                    if channel.channel_name != channel_name or channel.thumbnail_url != thumbnail_url:
-                        channel.channel_name = channel_name
-                        channel.thumbnail_url = thumbnail_url
-                        channels_updated += 1
-                        logger.info(f"Updated channel: {channel_name}")
+                if not channel:
+                    # Create new channel
+                    channel = Channel(
+                        channel_id=channel_id,
+                        channel_name=channel_name,
+                        channel_url=f"https://www.youtube.com/channel/{channel_id}",
+                        thumbnail_url=thumbnail_url,
+                        is_active=True,
+                    )
+                    db.add(channel)
+                    channels_updated += 1
+                    logger.info(f"Created channel: {channel_name}")
+                elif channel.channel_name != channel_name or channel.thumbnail_url != thumbnail_url:
+                    channel.channel_name = channel_name
+                    channel.thumbnail_url = thumbnail_url
+                    channels_updated += 1
+                    logger.info(f"Updated channel: {channel_name}")
+
+            db.commit()
+
+            # Phase 2: Fetch videos if requested
+            if fetch_videos:
+                # Use 14 days as date filter, but fetch up to 10 videos per channel
+                since_date = datetime.now(timezone.utc) - timedelta(days=14)
+
+                for sub in subscriptions:
+                    channel_id = sub["channel_id"]
+                    channel_name = sub.get("channel_name", "Unknown")
+
+                    try:
+                        # Fetch up to 10 videos per channel (will stop at since_date if reached)
+                        videos = youtube.get_channel_videos(
+                            channel_id,
+                            since_date=since_date,
+                            max_results=10,
+                        )
+
+                        # Get video details (duration, live status)
+                        if videos:
+                            video_ids = [v["video_id"] for v in videos if v.get("video_id")]
+                            video_details = youtube.get_video_details(video_ids)
+                            details_map = {v["video_id"]: v for v in video_details}
+
+                            for video in videos:
+                                video_id = video.get("video_id")
+                                if not video_id:
+                                    continue
+
+                                # Check if already processed
+                                existing = db.query(ProcessedVideo).filter(
+                                    ProcessedVideo.video_id == video_id
+                                ).first()
+
+                                if existing:
+                                    continue
+
+                                # Get details
+                                details = details_map.get(video_id, {})
+
+                                # Skip shorts (< 60s) and livestreams
+                                duration = details.get("duration_seconds", 0)
+                                if duration < 60:
+                                    logger.debug(f"Skipping short: {video_id} ({duration}s)")
+                                    continue
+
+                                if details.get("liveStreamingDetails"):
+                                    logger.debug(f"Skipping livestream: {video_id}")
+                                    continue
+
+                                # Parse published_at
+                                published_at = video.get("published_at")
+                                if isinstance(published_at, str):
+                                    try:
+                                        published_at = datetime.fromisoformat(
+                                            published_at.replace("Z", "+00:00")
+                                        )
+                                    except ValueError:
+                                        published_at = datetime.now(timezone.utc)
+
+                                # Create pending video record
+                                new_video = ProcessedVideo(
+                                    video_id=video_id,
+                                    channel_id=channel_id,
+                                    title=video.get("title", ""),
+                                    description=video.get("description", ""),
+                                    duration_seconds=duration,
+                                    published_at=published_at,
+                                    thumbnail_url=details.get("thumbnail_url") or video.get("thumbnail_url"),
+                                    processing_status="pending",
+                                )
+                                db.add(new_video)
+                                db.flush()
+
+                                new_videos_found += 1
+
+                                # Queue for processing
+                                process_video.delay(video_id)
+                                videos_queued += 1
+
+                        logger.info(f"Channel {channel_name}: found {len(videos)} videos")
+
+                    except Exception as e:
+                        logger.warning(f"Error fetching videos for {channel_name}: {e}")
+                        continue
+
+                # Update last_checked timestamp
+                db.query(Channel).filter(Channel.is_active == True).update(
+                    {"last_checked": datetime.now(timezone.utc)}
+                )
 
             db.commit()
 
@@ -443,6 +552,8 @@ def sync_channel_metadata(self) -> dict[str, Any]:
             "status": "completed",
             "channels_updated": channels_updated,
             "total_subscriptions": len(subscriptions),
+            "new_videos_found": new_videos_found,
+            "videos_queued": videos_queued,
         }
         logger.info(f"Channel sync complete: {result}")
         return result

@@ -604,18 +604,19 @@ async def get_digests_html(db: Session = Depends(get_db)):
 @router.post("/api/channels/sync", tags=["Channels"])
 async def sync_channels():
     """
-    Trigger channel metadata sync from YouTube API.
+    Trigger channel metadata and video sync from YouTube API.
 
-    Updates channel names and thumbnails from current subscriptions.
+    Updates channel names, thumbnails, and fetches new videos
+    (last 14 days or up to 10 videos per channel).
     """
-    task = sync_channel_metadata.delay()
+    task = sync_channel_metadata.delay(fetch_videos=True)
 
-    logger.info(f"Channel sync triggered, task_id: {task.id}")
+    logger.info(f"Channel & video sync triggered, task_id: {task.id}")
 
     return {
         "task_id": task.id,
         "status": "queued",
-        "message": "Kanal-Synchronisierung gestartet",
+        "message": "Kanäle & Videos werden synchronisiert",
     }
 
 
