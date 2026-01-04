@@ -227,26 +227,37 @@ async def get_oauth_status():
     """
     Get YouTube OAuth token status.
 
-    Reads token from file system (not database) since YouTubeService
-    uses file-based token storage.
+    Reads token from file system and attempts refresh if needed.
     """
-    from app.services.youtube_service import YouTubeService
+    from pathlib import Path
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+
+    token_path = Path("credentials/youtube_token.json")
+    SCOPES = ["https://www.googleapis.com/auth/youtube.readonly"]
 
     try:
-        service = YouTubeService()
-        creds = service._load_credentials()
-
-        if not creds:
+        if not token_path.exists():
             return {
                 "valid": False,
-                "message": "No OAuth token found. Run auth flow.",
+                "message": "Kein OAuth-Token gefunden. OAuth-Flow ausführen.",
             }
 
-        # Token is valid if it has a refresh_token (can be refreshed) OR is not expired
-        is_valid = creds.refresh_token is not None or (creds.valid and not creds.expired)
+        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+
+        # Try to refresh if expired
+        if creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+                # Token is now valid after refresh
+            except Exception as refresh_error:
+                logger.warning(f"Token refresh failed: {refresh_error}")
+
+        # Token is usable if valid OR has refresh_token (can be refreshed on demand)
+        is_usable = creds.valid or creds.refresh_token is not None
 
         return {
-            "valid": is_valid,
+            "valid": is_usable,
             "expired": creds.expired,
             "expiry": creds.expiry.isoformat() if creds.expiry else None,
             "has_refresh_token": creds.refresh_token is not None,
@@ -256,7 +267,7 @@ async def get_oauth_status():
         logger.error(f"Error checking OAuth status: {e}")
         return {
             "valid": False,
-            "message": f"Error checking token: {str(e)}",
+            "message": f"Fehler beim Token-Check: {str(e)}",
         }
 
 
@@ -293,14 +304,20 @@ async def get_status_html(db: Session = Depends(get_db)):
         DigestHistory.email_status == "sent"
     ).order_by(DigestHistory.sent_at.desc()).first()
 
-    # OAuth status
+    # OAuth status - check if token exists and has refresh capability
     try:
-        from app.services.youtube_service import YouTubeService
-        service = YouTubeService()
-        creds = service._load_credentials()
-        oauth_valid = creds is not None and (
-            creds.refresh_token is not None or (creds.valid and not creds.expired)
-        )
+        from pathlib import Path
+        from google.oauth2.credentials import Credentials
+        token_path = Path("credentials/youtube_token.json")
+        if token_path.exists():
+            creds = Credentials.from_authorized_user_file(
+                str(token_path),
+                ["https://www.googleapis.com/auth/youtube.readonly"]
+            )
+            # Valid if token works OR has refresh_token (can be refreshed on demand)
+            oauth_valid = creds.valid or creds.refresh_token is not None
+        else:
+            oauth_valid = False
     except Exception:
         oauth_valid = False
 
