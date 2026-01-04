@@ -69,9 +69,8 @@ body {
 }
 
 .header-logo {
-    height: 20px;
+    height: 22px;
     width: auto;
-    filter: brightness(0) invert(1);
 }
 
 .version {
