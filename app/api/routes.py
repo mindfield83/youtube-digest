@@ -278,7 +278,7 @@ async def get_oauth_status():
 
 @router.get("/api/status", response_class=HTMLResponse, tags=["HTMX Partials"])
 async def get_status_html(db: Session = Depends(get_db)):
-    """Return status cards as HTML partial for HTMX."""
+    """Return status bar as HTML partial for HTMX - compact two-line layout."""
     # Video counts by status
     pending = db.query(ProcessedVideo).filter(
         ProcessedVideo.processing_status == "pending"
@@ -332,41 +332,62 @@ async def get_status_html(db: Session = Depends(get_db)):
     except Exception:
         worker_active = False
 
-    oauth_class = "status-ok" if oauth_valid else "status-error"
+    # Status dot classes
+    oauth_dot = "ok" if oauth_valid else "error"
     oauth_text = "Verbunden" if oauth_valid else "Nicht verbunden"
-    worker_class = "status-ok" if worker_active else "status-error"
+    worker_dot = "ok" if worker_active else "error"
     worker_text = "Aktiv" if worker_active else "Inaktiv"
 
+    # Format timestamps
+    last_check_text = _format_date(last_check) if last_check else "Noch nie"
+    last_digest_text = _format_date(last_digest.sent_at) if last_digest else "Noch keiner"
+
+    # Total videos
+    total_videos = pending + processing + completed + failed
+
     html = f"""
-    <div class="status-cards">
-        <div class="status-card">
-            <h3>YouTube OAuth</h3>
-            <span class="status-badge {oauth_class}">{oauth_text}</span>
-        </div>
-        <div class="status-card">
-            <h3>Worker</h3>
-            <span class="status-badge {worker_class}">{worker_text}</span>
-        </div>
-        <div class="status-card">
-            <h3>Kanäle</h3>
-            <span class="status-value">{total_channels}</span>
-        </div>
-        <div class="status-card">
-            <h3>Videos</h3>
-            <div class="status-breakdown">
-                <span title="Ausstehend">⏳ {pending}</span>
-                <span title="In Bearbeitung">⚙️ {processing}</span>
-                <span title="Abgeschlossen">✅ {completed}</span>
-                <span title="Fehlgeschlagen">❌ {failed}</span>
+    <div class="status-bar">
+        <!-- Row 1: System Status + Overview -->
+        <div class="status-row">
+            <div class="status-item">
+                <span class="status-dot {oauth_dot}"></span>
+                <span class="status-label">OAuth</span>
+                <span class="status-value">{oauth_text}</span>
+            </div>
+            <div class="status-separator"></div>
+            <div class="status-item">
+                <span class="status-dot {worker_dot}"></span>
+                <span class="status-label">Worker</span>
+                <span class="status-value">{worker_text}</span>
+            </div>
+            <div class="status-separator"></div>
+            <div class="status-item">
+                <i class="ph ph-broadcast"></i>
+                <span class="status-label">Kanäle</span>
+                <span class="status-value">{total_channels}</span>
+            </div>
+            <div class="status-separator"></div>
+            <div class="status-item">
+                <i class="ph ph-video"></i>
+                <span class="status-label">Videos</span>
+                <span class="status-value" title="Ausstehend: {pending}, In Bearbeitung: {processing}, Abgeschlossen: {completed}, Fehlgeschlagen: {failed}">
+                    {total_videos} <small style="opacity:0.7">(⏳{pending} ⚙️{processing} ✅{completed} ❌{failed})</small>
+                </span>
             </div>
         </div>
-        <div class="status-card">
-            <h3>Letzte Prüfung</h3>
-            <span class="status-value">{_format_date(last_check)}</span>
-        </div>
-        <div class="status-card">
-            <h3>Letzter Digest</h3>
-            <span class="status-value">{_format_date(last_digest.sent_at) if last_digest else 'Noch keiner'}</span>
+        <!-- Row 2: Timestamps -->
+        <div class="status-row secondary">
+            <div class="status-item">
+                <i class="ph ph-clock"></i>
+                <span class="status-label">Letzte Prüfung</span>
+                <span class="status-value">{last_check_text}</span>
+            </div>
+            <div class="status-separator"></div>
+            <div class="status-item">
+                <i class="ph ph-envelope"></i>
+                <span class="status-label">Letzter Digest</span>
+                <span class="status-value">{last_digest_text}</span>
+            </div>
         </div>
     </div>
     """
