@@ -39,32 +39,44 @@ router = APIRouter()
 @router.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health_check(db: Session = Depends(get_db)):
     """
-    Health check endpoint.
+    Health check endpoint for Docker/Kubernetes.
 
-    Returns database and Redis connectivity status.
+    Checks database and Redis connectivity.
+    Returns 503 if unhealthy.
     """
+    import redis as redis_lib
+    from app import __version__
+    from app.config import get_settings
+
+    health_status = {
+        "status": "healthy",
+        "database": "unknown",
+        "redis": "unknown",
+        "version": __version__,
+    }
+
+    # Check database
     try:
-        # Check database
         db.execute(text("SELECT 1"))
-        db_healthy = True
-    except Exception:
-        db_healthy = False
+        health_status["database"] = "connected"
+    except Exception as e:
+        health_status["database"] = f"error: {str(e)}"
+        health_status["status"] = "unhealthy"
 
+    # Check Redis
     try:
-        # Check Redis via Celery
-        celery_app.control.ping(timeout=1)
-        redis_healthy = True
-    except Exception:
-        redis_healthy = False
+        settings = get_settings()
+        r = redis_lib.from_url(settings.redis_url)
+        r.ping()
+        health_status["redis"] = "connected"
+    except Exception as e:
+        health_status["redis"] = f"error: {str(e)}"
+        health_status["status"] = "unhealthy"
 
-    status = "healthy" if (db_healthy and redis_healthy) else "degraded"
+    if health_status["status"] == "unhealthy":
+        raise HTTPException(status_code=503, detail=health_status)
 
-    return HealthResponse(
-        status=status,
-        database=db_healthy,
-        redis=redis_healthy,
-        timestamp=datetime.now(timezone.utc),
-    )
+    return health_status
 
 
 # ============================================================================

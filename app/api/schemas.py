@@ -175,12 +175,12 @@ class SystemStatus(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Health check response."""
+    """Health check response for Docker/Kubernetes."""
 
-    status: str = "healthy"
-    database: bool = True
-    redis: bool = True
-    timestamp: datetime = Field(default_factory=lambda: datetime.now())
+    status: str = Field(..., description="Overall health status")
+    database: str = Field(..., description="Database connection status")
+    redis: str = Field(..., description="Redis connection status")
+    version: str = Field(..., description="Application version")
 
 
 # ============================================================================
