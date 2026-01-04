@@ -19,12 +19,12 @@ Projektspezifische Anweisungen für Claude Code.
 |------------|-------------|
 | **Backend** | FastAPI + Python 3.11 |
 | **Task Queue** | Celery + Redis |
-| **Database** | PostgreSQL 15 |
-| **AI/LLM** | Google Gemini 3.0 Flash (`gemini-3-flash-preview`) |
+| **Database** | PostgreSQL 16 Alpine |
+| **AI/LLM** | Google Gemini 2.0 Flash (`gemini-2.0-flash`) |
 | **Transcripts** | youtube-transcript-api + Supadata (Fallback) |
-| **Email** | SMTP (Mindfield Mailserver) |
-| **Container** | Docker Compose |
-| **Reverse Proxy** | Traefik (youtube-digest.vps-ubuntu.mindfield.de) |
+| **Email** | Resend API |
+| **Container** | Docker Compose (5 Services) |
+| **Reverse Proxy** | Caddy (youtube-digest.vps-ubuntu.mindfield.de) |
 
 ## Projektstruktur
 
@@ -103,10 +103,10 @@ Videos werden automatisch kategorisiert:
 
 | Service | Env Variable | Status |
 |---------|--------------|--------|
-| YouTube OAuth | `credentials/youtube_oauth.json` | Lokal vorhanden |
-| Gemini API | `GEMINI_API_KEY` | Vorhanden |
-| Supadata API | `SUPADATA_API_KEY` | Vorhanden |
-| SMTP | `SMTP_*` | Mindfield Mailserver |
+| YouTube OAuth | `credentials/youtube_oauth.json` | Auf Server vorhanden |
+| Gemini API | `GEMINI_API_KEY` | Konfiguriert |
+| Supadata API | `SUPADATA_API_KEY` | Konfiguriert |
+| Resend API | `RESEND_API_KEY` | Konfiguriert |
 
 ## Wichtige Befehle
 
@@ -152,13 +152,22 @@ docker-compose logs -f worker
 ## Deployment
 
 **URL:** `https://youtube-digest.vps-ubuntu.mindfield.de`
-**Stack-Pfad:** `/opt/stacks/youtube-digest`
+**Stack-Pfad:** `/home/raguser/youtube-digest`
+**GitHub:** `github.com/mindfield83/youtube-digest`
 
 ```bash
 # Auf Contabo VPS
-cd /opt/stacks/youtube-digest
-docker-compose pull
-docker-compose up -d
+cd /home/raguser/youtube-digest
+git pull
+docker compose up -d --build
+
+# Container Status
+docker ps --filter "name=youtube-digest"
+
+# Logs
+docker logs youtube-digest-app
+docker logs youtube-digest-worker
+docker logs youtube-digest-beat
 ```
 
 ## Implementierungsplan
@@ -171,10 +180,10 @@ Siehe [docs/PRD.md](docs/PRD.md) für den vollständigen Plan.
 |-------|--------|--------|
 | **1** | ✅ Erledigt | Projektstruktur, Config, Models, Credentials |
 | **2** | ✅ Erledigt | YouTube Service, Transcript Service, Unit Tests |
-| **3** | ✅ Erledigt | Summarization Service (Gemini 3.0 Flash) |
+| **3** | ✅ Erledigt | Summarization Service (Gemini 2.0 Flash) |
 | **4** | ✅ Erledigt | Digest Generator, Email Service, HTML-Template |
 | **5** | ✅ Erledigt | Celery Tasks, API Routes, Dashboard, HTMX |
-| **6** | Ausstehend | Docker Compose, Tests, Deployment |
+| **6** | ✅ Erledigt | Docker, E2E Tests, Resend Email, Deployment |
 
 ## Konventionen
 

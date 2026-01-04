@@ -430,6 +430,163 @@ Folgende Best Practices wurden recherchiert und bestätigt:
 
 ---
 
+## 2026-01-04 - Batch 6: Docker Deployment & Production
+
+### Was wurde gemacht
+
+- Multi-Stage Dockerfile erstellt (Python 3.11-slim, non-root user)
+- Docker Compose mit 5 Services (App, Worker, Beat, PostgreSQL, Redis)
+- Caddy Reverse Proxy Konfiguration auf Contabo VPS
+- E2E Tests für Full Pipeline und Celery Tasks
+- Email Service auf Resend API umgestellt (statt SMTP)
+- Erfolgreiches Deployment auf `youtube-digest.vps-ubuntu.mindfield.de`
+- SSL-Zertifikat via Let's Encrypt automatisch erstellt
+
+### Erstellte/Geänderte Dateien
+
+| Datei | Beschreibung |
+|-------|--------------|
+| `Dockerfile` | Multi-Stage Build mit Builder und Runtime Stage |
+| `docker-compose.yml` | 5 Services mit Health Checks und External Network |
+| `.dockerignore` | Excludes für Build (Git, IDE, Tests, Docs) |
+| `app/api/routes.py` | Erweiterter Health Check (DB + Redis Status) |
+| `app/api/schemas.py` | HealthResponse Schema mit Details |
+| `app/services/email_service.py` | Komplett refaktoriert für Resend API |
+| `app/config.py` | SMTP Settings → Resend Settings |
+| `requirements.txt` | `aiosmtplib` → `resend>=2.0.0` |
+| `tests/e2e/conftest.py` | E2E Test Fixtures |
+| `tests/e2e/test_full_pipeline.py` | E2E Tests für Pipeline |
+| `tests/e2e/test_celery_tasks.py` | E2E Tests für Celery Tasks |
+
+### Docker Architecture
+
+```
+youtube-digest-app     (FastAPI, Port 8090→8000)
+youtube-digest-worker  (Celery Worker, 2 Concurrency)
+youtube-digest-beat    (Celery Beat Scheduler)
+youtube-digest-db      (PostgreSQL 16 Alpine)
+youtube-digest-redis   (Redis 7 Alpine)
+```
+
+### Email Service Änderung
+
+| Vorher | Nachher |
+|--------|---------|
+| SMTP (smtplib) | Resend API (SDK) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | `RESEND_API_KEY` |
+| `EMAIL_FROM`, `EMAIL_TO` | `EMAIL_FROM_ADDRESS`, `EMAIL_TO_ADDRESS` |
+
+### Deployment Details
+
+| Aspekt | Wert |
+|--------|------|
+| Server | Contabo VPS (`vps-ubuntu.mindfield.de`) |
+| URL | `https://youtube-digest.vps-ubuntu.mindfield.de` |
+| Reverse Proxy | Caddy (caddy_gateway Network) |
+| SSL | Let's Encrypt (automatisch) |
+| Repository | `github.com/mindfield83/youtube-digest` (public) |
+| Deploy Path | `/home/raguser/youtube-digest` |
+
+### Environment Variables (Production)
+
+| Variable | Quelle |
+|----------|--------|
+| `POSTGRES_PASSWORD` | Generiert (24 Zeichen) |
+| `GEMINI_API_KEY` | Google AI Studio |
+| `SUPADATA_API_KEY` | Supadata Dashboard |
+| `RESEND_API_KEY` | Resend Console |
+| `EMAIL_TO_ADDRESS` | `niko.huebner@gmail.com` |
+
+### Entscheidungen
+
+| Entscheidung | Begründung |
+|--------------|------------|
+| Caddy statt Traefik | Bereits auf Server, einfacher für zusätzlichen Service |
+| Resend statt SMTP | Bessere Deliverability, einfachere API, Retry eingebaut |
+| GitHub Public Repo | Einfachstes Deployment auf Server (clone ohne Auth) |
+| `/var/run/celery` für Beat | Vermeidet Permission-Probleme mit Docker Volumes |
+| Multi-Stage Dockerfile | Kleinere Images, Build-Tools nicht in Runtime |
+
+### Probleme & Lösungen
+
+| Problem | Lösung |
+|---------|--------|
+| SSH-MCP 1000 Zeichen Limit | GitHub Repository für Datei-Transfer |
+| Git dubious ownership | `git config --global --add safe.directory` |
+| Caddyfile EOF-Artefakte | Manuelle Bereinigung der Datei |
+| Celerybeat Permission Denied | Volume auf `/var/run/celery` statt `/app` |
+| Worker als unhealthy markiert | Normal - hat keinen HTTP Health Endpoint |
+
+### Commits
+
+- `feat(docker): add multi-stage Dockerfile and docker-compose`
+- `feat(docker): add .dockerignore for optimized builds`
+- `feat(api): extend health check endpoint with detailed status`
+- `test(e2e): add full pipeline and Celery task tests`
+- `feat(email): refactor email service to use Resend API`
+- `fix(docker): fix celerybeat schedule permissions`
+
+### Verifizierung
+
+```bash
+# Health Check
+curl https://youtube-digest.vps-ubuntu.mindfield.de/health
+# {"status":"healthy","database":"connected","redis":"connected","version":"0.1.0"}
+
+# Container Status
+docker ps --filter "name=youtube-digest"
+# 5 Container: app (healthy), worker, beat, db (healthy), redis (healthy)
+```
+
+### Nächste Schritte
+
+1. YouTube OAuth Token auf Server erstellen (manueller Flow)
+2. Erste Video-Verarbeitung testen
+3. Test-E-Mail mit Resend senden
+4. Celery Beat Schedule verifizieren
+
+---
+
+## 2026-01-04 - Unit Test Fixes für Resend Migration
+
+### Was wurde gemacht
+
+- Unit Tests für Resend API Migration angepasst
+- Alle 138 Unit Tests bestehen
+- Fixes auf Server deployed
+
+### Behobene Test-Fehler
+
+| Test | Problem | Lösung |
+|------|---------|--------|
+| `test_tasks.py` | `smtp_to_address` Attribut | → `email_to_address` |
+| `test_email_service.py` | `ResendError` Constructor | Generic `Exception` für Mocks |
+| `test_api_routes.py` | Redis Mock fehlt | `@patch("redis.from_url")` |
+| `test_transcript_service.py` | API Key Check | Settings Mock hinzugefügt |
+| `test_summarization_service.py` | Batch call count | Flexiblere Assertions |
+
+### Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `app/tasks.py` | `smtp_to_address` → `email_to_address` (Zeile 297) |
+| `tests/unit/test_email_service.py` | ResendError Mocks korrigiert |
+| `tests/unit/test_api_routes.py` | Redis Mock für Health Endpoint |
+| `tests/unit/test_transcript_service.py` | Settings Mock für API Key Test |
+| `tests/unit/test_summarization_service.py` | Batch Summarize Assertions |
+
+### Test-Ergebnis
+
+```
+============================= 138 passed in 19.47s =============================
+```
+
+### Commits
+
+- `fix(tests): update unit tests for Resend migration`
+
+---
+
 ## Template für weitere Einträge
 
 ```markdown
