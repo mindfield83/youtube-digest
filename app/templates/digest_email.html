@@ -1,0 +1,196 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ subject }}</title>
+    <!--[if mso]>
+    <style type="text/css">
+        body, table, td {font-family: Arial, sans-serif !important;}
+    </style>
+    <![endif]-->
+</head>
+<body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: 'Inter', Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+
+    <!-- Wrapper Table -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f5f5f5;">
+        <tr>
+            <td align="center" style="padding: 24px 16px;">
+
+                <!-- Main Container -->
+                <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; width: 100%;">
+
+                    <!-- Header -->
+                    <tr>
+                        <td style="background-color: #17214B; border-radius: 10px 10px 0 0; padding: 32px 24px; text-align: center;">
+                            <h1 style="margin: 0 0 8px 0; font-family: 'Montserrat', Arial, sans-serif; font-size: 28px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;">
+                                YouTube Digest
+                            </h1>
+                            <p style="margin: 0 0 16px 0; font-size: 16px; color: rgba(255, 255, 255, 0.8);">
+                                {{ period_start | format_date }} &ndash; {{ period_end | format_date }}
+                            </p>
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto;">
+                                <tr>
+                                    <td style="padding: 8px 16px; background-color: rgba(255, 255, 255, 0.15); border-radius: 20px;">
+                                        <span style="font-size: 14px; font-weight: 600; color: #ffffff;">
+                                            {{ video_count }} Videos &bull; {{ total_duration }} Gesamtdauer
+                                        </span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Quick Navigation -->
+                    <tr>
+                        <td style="background-color: #ffffff; padding: 16px 24px; border-bottom: 1px solid #e5e5e5;">
+                            <p style="margin: 0; font-size: 13px; color: #525252; text-align: center;">
+                                <strong style="color: #17214B;">Schnellnavigation:</strong>
+                                {% for category, videos in grouped_videos.items() %}
+                                <a href="#cat-{{ loop.index }}" style="color: #17214B; text-decoration: none; margin: 0 8px;">{{ category }} ({{ videos | length }})</a>{% if not loop.last %}&bull;{% endif %}
+                                {% endfor %}
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Content Area -->
+                    <tr>
+                        <td style="background-color: #f5f5f5; padding: 8px 0;">
+
+                            {% for category, videos in grouped_videos.items() %}
+                            <!-- Category Section: {{ category }} -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                                <tr>
+                                    <td style="padding: 24px 24px 12px 24px;">
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                                            <tr>
+                                                <td>
+                                                    <a name="cat-{{ loop.index }}"></a>
+                                                    <h2 style="margin: 0; font-family: 'Montserrat', Arial, sans-serif; font-size: 18px; font-weight: 700; color: #17214B;">
+                                                        {{ category }}
+                                                    </h2>
+                                                </td>
+                                                <td align="right">
+                                                    <span style="display: inline-block; padding: 4px 12px; background-color: #17214B; color: #ffffff; font-size: 12px; font-weight: 600; border-radius: 12px;">
+                                                        {{ videos | length }}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+
+                                {% for video in videos %}
+                                <!-- Video Card -->
+                                <tr>
+                                    <td style="padding: 8px 24px;">
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);">
+                                            <tr>
+                                                <td style="padding: 20px;">
+                                                    <!-- Video Title -->
+                                                    <h3 style="margin: 0 0 8px 0; font-family: 'Montserrat', Arial, sans-serif; font-size: 16px; font-weight: 600; color: #171717; line-height: 1.4;">
+                                                        {{ video.title }}
+                                                    </h3>
+
+                                                    <!-- Meta Info -->
+                                                    <p style="margin: 0 0 16px 0; font-size: 13px; color: #525252;">
+                                                        {{ video.channel_name }} &bull; {{ video.duration }}
+                                                    </p>
+
+                                                    <!-- Core Message -->
+                                                    <p style="margin: 0 0 16px 0; font-size: 14px; color: #171717; line-height: 1.6;">
+                                                        {{ video.core_message }}
+                                                    </p>
+
+                                                    <!-- Key Takeaways -->
+                                                    {% if video.key_takeaways %}
+                                                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 16px;">
+                                                        {% for takeaway in video.key_takeaways[:5] %}
+                                                        <tr>
+                                                            <td width="20" valign="top" style="padding: 2px 0; font-size: 14px; color: #E31C23;">
+                                                                &bull;
+                                                            </td>
+                                                            <td style="padding: 2px 0; font-size: 14px; color: #404040; line-height: 1.5;">
+                                                                {{ takeaway }}
+                                                            </td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </table>
+                                                    {% endif %}
+
+                                                    <!-- Action Items (if any) -->
+                                                    {% if video.action_items %}
+                                                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 16px; padding: 12px; background-color: #fafafa; border-radius: 6px; border-left: 3px solid #E31C23;">
+                                                        <tr>
+                                                            <td>
+                                                                <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 600; color: #E31C23; text-transform: uppercase; letter-spacing: 0.5px;">
+                                                                    Action Items
+                                                                </p>
+                                                                {% for item in video.action_items[:3] %}
+                                                                <p style="margin: 0{% if not loop.last %} 0 4px 0{% endif %}; font-size: 13px; color: #404040;">
+                                                                    &rarr; {{ item }}
+                                                                </p>
+                                                                {% endfor %}
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                    {% endif %}
+
+                                                    <!-- Buttons -->
+                                                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                                        <tr>
+                                                            <td style="padding-right: 8px;">
+                                                                <a href="{{ video.youtube_url }}" target="_blank" style="display: inline-block; padding: 10px 20px; background-color: #E31C23; color: #ffffff; font-size: 13px; font-weight: 600; text-decoration: none; border-radius: 6px;">
+                                                                    Video ansehen
+                                                                </a>
+                                                            </td>
+                                                            <td>
+                                                                <a href="{{ video.summary_url }}" target="_blank" style="display: inline-block; padding: 10px 20px; background-color: #17214B; color: #ffffff; font-size: 13px; font-weight: 600; text-decoration: none; border-radius: 6px;">
+                                                                    Zusammenfassung
+                                                                </a>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </table>
+                            {% endfor %}
+
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #17214B; border-radius: 0 0 10px 10px; padding: 24px; text-align: center;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto 16px auto;">
+                                <tr>
+                                    <td>
+                                        <a href="{{ dashboard_url }}" target="_blank" style="display: inline-block; padding: 12px 32px; background-color: #ffffff; color: #17214B; font-size: 14px; font-weight: 600; text-decoration: none; border-radius: 6px;">
+                                            Dashboard &ouml;ffnen
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style="margin: 0; font-size: 12px; color: rgba(255, 255, 255, 0.6);">
+                                Generiert: {{ generated_at | format_datetime }}
+                            </p>
+                            <p style="margin: 8px 0 0 0; font-size: 11px; color: rgba(255, 255, 255, 0.4);">
+                                YouTube Digest by Mindfield Biosystems
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+                <!-- End Main Container -->
+
+            </td>
+        </tr>
+    </table>
+    <!-- End Wrapper Table -->
+
+</body>
+</html>
