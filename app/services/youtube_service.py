@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 # YouTube API scopes
 SCOPES = ["https://www.googleapis.com/auth/youtube.readonly"]
 
-# Minimum video duration to not be considered a Short (60 seconds)
-MIN_VIDEO_DURATION_SECONDS = 60
+# Minimum video duration (2 minutes) - skip shorts and snippet videos
+MIN_VIDEO_DURATION_SECONDS = 120
 
 
 class YouTubeServiceError(Exception):
@@ -68,7 +68,7 @@ def is_valid_video(video: dict) -> bool:
     Check if a video should be processed.
 
     Filters out:
-    - Shorts (< 60 seconds)
+    - Short videos (< 2 minutes)
     - Livestreams (active or past)
     - Upcoming premieres
 
@@ -97,7 +97,7 @@ def is_valid_video(video: dict) -> bool:
 
     if duration_seconds < MIN_VIDEO_DURATION_SECONDS:
         logger.debug(
-            f"Filtering Short ({duration_seconds}s): {snippet.get('title', 'Unknown')}"
+            f"Filtering short video ({duration_seconds}s < 2min): {snippet.get('title', 'Unknown')}"
         )
         return False
 

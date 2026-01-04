@@ -518,10 +518,10 @@ def sync_channel_metadata(self, fetch_videos: bool = True) -> dict[str, Any]:
                                 # Get details
                                 details = details_map.get(video_id, {})
 
-                                # Skip shorts (< 60s) and livestreams
+                                # Skip short videos (< 2 min) and livestreams
                                 duration = details.get("duration_seconds", 0)
-                                if duration < 60:
-                                    logger.debug(f"Skipping short: {video_id} ({duration}s)")
+                                if duration < 120:
+                                    logger.debug(f"Skipping short video: {video_id} ({duration}s < 2min)")
                                     continue
 
                                 if details.get("liveStreamingDetails"):

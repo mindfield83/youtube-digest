@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from app import __version__
 from app.api.routes import health_router, router as api_router
 from app.config import get_settings
-from app.models import init_db
+from app.models import init_db, SessionLocal, ProcessedVideo, Channel
 
 # Configure logging
 logging.basicConfig(
@@ -140,15 +140,57 @@ async def video_detail(
     """
     Render video detail page with full summary.
     """
-    return templates.TemplateResponse(
-        "dashboard.html",
-        {
-            "request": request,
-            "title": "YouTube Digest",
-            "version": __version__,
-            "video_id": video_id,
-        },
-    )
+    with SessionLocal() as db:
+        video = db.query(ProcessedVideo).filter(
+            ProcessedVideo.video_id == video_id
+        ).first()
+
+        if not video:
+            return templates.TemplateResponse(
+                "video_detail.html",
+                {
+                    "request": request,
+                    "title": "Video nicht gefunden",
+                    "version": __version__,
+                    "video": None,
+                },
+            )
+
+        channel = db.query(Channel).filter(
+            Channel.channel_id == video.channel_id
+        ).first()
+
+        # Format duration
+        hours, remainder = divmod(video.duration_seconds or 0, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours > 0:
+            duration_str = f"{hours}h {minutes}min"
+        else:
+            duration_str = f"{minutes}min {seconds}s"
+
+        # Format published date
+        published_str = video.published_at.strftime("%d.%m.%Y %H:%M") if video.published_at else "Unbekannt"
+
+        video_data = {
+            "video_id": video.video_id,
+            "title": video.title,
+            "channel_name": channel.channel_name if channel else "Unbekannt",
+            "duration": duration_str,
+            "published_at": published_str,
+            "category": video.category,
+            "youtube_url": f"https://www.youtube.com/watch?v={video.video_id}",
+            "summary": video.summary,
+        }
+
+        return templates.TemplateResponse(
+            "video_detail.html",
+            {
+                "request": request,
+                "title": video.title,
+                "version": __version__,
+                "video": video_data,
+            },
+        )
 
 
 # ============================================================================
