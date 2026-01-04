@@ -30,7 +30,7 @@ services:
       - APP_ENV=production
       - LOG_LEVEL=INFO
     volumes:
-      - ./credentials:/app/credentials:ro
+      - ./credentials:/app/credentials
     depends_on:
       db:
         condition: service_healthy
@@ -67,7 +67,7 @@ services:
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-YouTube Digest <digest@resend.dev>}
       - EMAIL_TO_ADDRESS=${EMAIL_TO_ADDRESS:-niko.huebner@gmail.com}
     volumes:
-      - ./credentials:/app/credentials:ro
+      - ./credentials:/app/credentials
     depends_on:
       db:
         condition: service_healthy
