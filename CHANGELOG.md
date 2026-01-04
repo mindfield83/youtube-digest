@@ -3,6 +3,30 @@
 Alle wichtigen Änderungen werden hier dokumentiert.
 Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
+## [1.0.0] - 2026-01-04
+
+### Hinzugefügt
+
+#### Batch 6 - Production Deployment & Fixes
+- Docker Compose Deployment auf Contabo VPS
+- Caddy Reverse Proxy mit SSL
+- OAuth Token Management (file-based)
+- E2E Test Suite
+- TESTRESULTS.md Dokumentation
+
+### Geändert
+- Email Service: SMTP → Resend API
+- OAuth Status Route: Database → File-based Token
+- Transcript Service: youtube-transcript-api v1.x Kompatibilität
+- Supadata Response Parsing: String + List Support
+
+### Behoben
+- `fix(api): read OAuth token from file instead of database`
+- `fix(transcript): handle Supadata response formats correctly`
+- `fix(transcript): update youtube-transcript-api to v1.x API`
+
+---
+
 ## [Unreleased]
 
 ### Hinzugefügt
@@ -135,18 +159,7 @@ Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
   - PostgreSQL-only Tests (automatisch geskippt ohne PostgreSQL)
   - Full Endpoint Tests mit echter Datenbank
 
-### Geplant (Batch 6)
+### Abgeschlossen
 
-- Docker Compose für Contabo
-- Deployment Konfiguration
-- End-to-End Tests
-- Produktiver Release
-
----
-
-## [1.0.0] - TBD
-
-### Hinzugefügt
-
-- Erster produktiver Release
-- Alle P0-Features implementiert
+Alle Batches 1-6 wurden erfolgreich implementiert und deployed.
+Siehe [TESTRESULTS.md](TESTRESULTS.md) für detaillierte Testergebnisse.

@@ -21,7 +21,7 @@ Projektspezifische Anweisungen für Claude Code.
 | **Task Queue** | Celery + Redis |
 | **Database** | PostgreSQL 16 Alpine |
 | **AI/LLM** | Google Gemini 2.0 Flash (`gemini-2.0-flash`) |
-| **Transcripts** | youtube-transcript-api + Supadata (Fallback) |
+| **Transcripts** | youtube-transcript-api v1.x + Supadata (Fallback) |
 | **Email** | Resend API |
 | **Container** | Docker Compose (5 Services) |
 | **Reverse Proxy** | Caddy (youtube-digest.vps-ubuntu.mindfield.de) |
@@ -103,10 +103,11 @@ Videos werden automatisch kategorisiert:
 
 | Service | Env Variable | Status |
 |---------|--------------|--------|
-| YouTube OAuth | `credentials/youtube_oauth.json` | Auf Server vorhanden |
-| Gemini API | `GEMINI_API_KEY` | Konfiguriert |
-| Supadata API | `SUPADATA_API_KEY` | Konfiguriert |
-| Resend API | `RESEND_API_KEY` | Konfiguriert |
+| YouTube OAuth | `credentials/youtube_token.json` | ✅ Auf Server vorhanden |
+| YouTube Client | `credentials/youtube_oauth.json` | ✅ Konfiguriert |
+| Gemini API | `GEMINI_API_KEY` | ✅ Konfiguriert |
+| Supadata API | `SUPADATA_API_KEY` | ✅ Konfiguriert |
+| Resend API | `RESEND_API_KEY` | ✅ Konfiguriert |
 
 ## Wichtige Befehle
 
@@ -198,3 +199,19 @@ Videos werden ignoriert wenn:
 - Dauer < 60 Sekunden (Shorts)
 - `liveStreamingDetails` vorhanden (Livestreams)
 - Titel enthält typische Werbe-Pattern
+
+## Known Limitations
+
+1. **YouTube IP Block**: YouTube blockiert Transkript-Anfragen von Cloud-Provider-IPs
+   - Supadata API dient als zuverlässiger Fallback
+   - Betrifft nur Transkript-Extraktion, nicht YouTube Data API
+
+## Test Status
+
+| Test-Typ | Status | Details |
+|----------|--------|---------|
+| Unit Tests | ✅ 138/138 | 19.97s |
+| E2E Tests | ✅ 5/5 | YouTube API, Transcript, Gemini, Celery |
+| API Endpoints | ✅ 6/6 | Health, Status, OAuth, Channels, Videos, Digests |
+
+Siehe [TESTRESULTS.md](TESTRESULTS.md) für detaillierte Testergebnisse.
