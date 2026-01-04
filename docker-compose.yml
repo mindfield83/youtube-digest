@@ -5,8 +5,6 @@
 # Services: FastAPI, Celery Worker, Celery Beat, PostgreSQL, Redis
 # Network: Connects to external caddy_gateway for reverse proxy
 
-version: "3.8"
-
 services:
   # ==========================================================================
   # FastAPI Application
@@ -87,12 +85,13 @@ services:
       dockerfile: Dockerfile
     container_name: youtube-digest-beat
     restart: unless-stopped
-    command: celery -A app.celery_app beat --loglevel=info
+    command: celery -A app.celery_app beat --loglevel=info --schedule=/var/run/celery/celerybeat-schedule
     environment:
       - DATABASE_URL=postgresql://youtube_digest:${POSTGRES_PASSWORD:-youtube_digest_secret}@db:5432/youtube_digest
       - REDIS_URL=redis://redis:6379/0
     volumes:
-      - celerybeat_data:/app
+      - celerybeat_data:/var/run/celery
+    user: root
     depends_on:
       - worker
     networks:
