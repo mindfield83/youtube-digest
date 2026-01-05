@@ -827,6 +827,63 @@ main {
 }
 
 /* ============================================================================
+   Action Progress (Inline under buttons)
+   ============================================================================ */
+.action-progress {
+    margin-top: 16px;
+    padding: 16px 20px;
+    background: var(--mindfield-white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--mindfield-blue);
+}
+
+.action-progress__header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.action-progress__icon {
+    font-size: 1.4rem;
+    color: var(--mindfield-blue);
+    animation: spin 1s linear infinite;
+}
+
+.action-progress__icon.ph-check-circle,
+.action-progress__icon.ph-x-circle {
+    animation: none;
+}
+
+.action-progress__message {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+
+.action-progress__bar-container {
+    height: 6px;
+    background: var(--mindfield-light);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.action-progress__bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--mindfield-blue), var(--mindfield-red));
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.action-progress__detail {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    min-height: 1.2em;
+}
+
+/* ============================================================================
    Video Cards (Compact Layout with Header + Body)
    ============================================================================ */
 .video-cards {

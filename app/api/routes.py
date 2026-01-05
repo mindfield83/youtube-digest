@@ -837,12 +837,12 @@ async def send_test_email():
 # ============================================================================
 
 
-@router.get("/api/tasks/{task_id}/progress", response_class=HTMLResponse, tags=["Tasks"])
-async def get_task_progress_html(task_id: str):
+@router.get("/api/tasks/{task_id}/progress", tags=["Tasks"])
+async def get_task_progress(task_id: str):
     """
-    Get task progress as HTML partial for HTMX polling.
+    Get task progress as JSON for JavaScript polling.
 
-    Returns progress modal content with current phase, progress bar, and status.
+    Returns phase, percent, message, and optional channel/video info.
     """
     result = celery_app.AsyncResult(task_id)
 
@@ -881,46 +881,12 @@ async def get_task_progress_html(task_id: str):
         current_channel = meta.get("current_channel") if isinstance(meta, dict) else None
         current_video = meta.get("current_video_title") if isinstance(meta, dict) else None
 
-    # Phase icons
-    phase_icons = {
-        "initializing": "ph-hourglass",
-        "processing": "ph-gear",
-        "generating_digest": "ph-file-text",
-        "sending_email": "ph-envelope",
-        "completed": "ph-check-circle",
-        "failed": "ph-x-circle",
+    return {
+        "task_id": task_id,
+        "status": status,
+        "phase": phase,
+        "percent": percent,
+        "message": message,
+        "current_channel": current_channel,
+        "current_video_title": current_video,
     }
-    icon = phase_icons.get(phase, "ph-spinner")
-
-    # Phase colors
-    phase_colors = {
-        "completed": "#22c55e",
-        "failed": "#ef4444",
-    }
-    color = phase_colors.get(phase, "#17214B")
-
-    # Build HTML
-    channel_html = f'<div class="progress-channel">{current_channel}</div>' if current_channel else ""
-    video_html = f'<div class="progress-video">{current_video}</div>' if current_video else ""
-
-    # Auto-close attribute for completed/failed states
-    auto_close = 'data-auto-close="5000"' if phase in ("completed", "failed") else ""
-
-    html = f"""
-    <div class="progress-content" {auto_close}>
-        <div class="progress-icon" style="color: {color};">
-            <i class="{icon}"></i>
-        </div>
-        <div class="progress-info">
-            <div class="progress-message">{message}</div>
-            {channel_html}
-            {video_html}
-        </div>
-        <div class="progress-bar-container">
-            <div class="progress-bar" style="width: {percent}%;"></div>
-        </div>
-        <div class="progress-percent">{percent}%</div>
-    </div>
-    """
-
-    return HTMLResponse(content=html)

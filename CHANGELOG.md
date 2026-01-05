@@ -3,6 +3,36 @@
 Alle wichtigen Änderungen werden hier dokumentiert.
 Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
+## [1.3.0] - 2026-01-05
+
+### Hinzugefügt
+
+#### Ein-Klick-Digest mit Fortschrittsanzeige
+- **Kombinierter Workflow**: "Digest erstellen" Button führt jetzt alles automatisch aus:
+  1. Neue Videos von YouTube abrufen
+  2. Videos verarbeiten (Transkript + KI-Zusammenfassung)
+  3. Digest generieren und per E-Mail senden
+- **Inline Progress-Anzeige**: Sichtbare Fortschrittsanzeige direkt unter den Action-Buttons
+  - Progress-Bar mit Phasen-Indikator (Sync → Processing → Generate → Send)
+  - Aktueller Kanal und Video-Titel während Verarbeitung
+  - Automatisches Ausblenden nach Abschluss
+- **`check_for_new` Parameter**: `generate_and_send_digest` Task akzeptiert `check_for_new=True` (Default)
+  - Wenn aktiviert, werden erst neue Videos geladen und verarbeitet
+  - Kann mit `check_for_new=False` für schnelle Digest-Erstellung ohne Sync deaktiviert werden
+
+### Behoben
+
+- **last_checked Bug**: Zeitstempel "Zuletzt geprüft" wird jetzt korrekt pro Kanal aktualisiert
+- **Test-Kompatibilität**: `safe_update_state` Helper verhindert Fehler wenn Tasks außerhalb von Celery ausgeführt werden
+
+### Geändert
+
+- **Progress Endpoint**: `/api/tasks/{task_id}/progress` liefert jetzt JSON statt HTML für JavaScript-Polling
+- **Dashboard JavaScript**: Inline Progress-Container statt Modal für bessere UX
+- **Button-Verhalten**: "Digest erstellen" Button wird während Ausführung deaktiviert
+
+---
+
 ## [1.2.0] - 2026-01-04
 
 ### Hinzugefügt

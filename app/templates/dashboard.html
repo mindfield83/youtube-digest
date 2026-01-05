@@ -58,9 +58,21 @@
                     OAuth-Status prüfen
                 </a>
             </div>
+
+            <!-- Inline Progress (under buttons) -->
+            <div id="action-progress" class="action-progress" style="display: none;">
+                <div class="action-progress__header">
+                    <i class="ph ph-spinner action-progress__icon"></i>
+                    <span class="action-progress__message">Initialisiere...</span>
+                </div>
+                <div class="action-progress__bar-container">
+                    <div class="action-progress__bar" style="width: 0%;"></div>
+                </div>
+                <div class="action-progress__detail"></div>
+            </div>
         </section>
 
-        <!-- Progress Modal -->
+        <!-- Progress Modal (fallback) -->
         <div id="progress-modal" class="modal" style="display: none;">
             <div class="modal-backdrop" onclick="closeProgressModal()"></div>
             <div class="modal-content">
@@ -224,16 +236,22 @@
             }
         }
 
-        // Progress modal
+        // Progress tracking (inline under buttons)
         let progressPollingInterval = null;
         let currentTaskId = null;
 
-        function openProgressModal() {
-            document.getElementById('progress-modal').style.display = 'flex';
+        function showInlineProgress() {
+            const container = document.getElementById('action-progress');
+            container.style.display = 'block';
+            // Disable digest button while running
+            document.getElementById('digest-btn').disabled = true;
         }
 
-        function closeProgressModal() {
-            document.getElementById('progress-modal').style.display = 'none';
+        function hideInlineProgress() {
+            const container = document.getElementById('action-progress');
+            container.style.display = 'none';
+            // Re-enable digest button
+            document.getElementById('digest-btn').disabled = false;
             if (progressPollingInterval) {
                 clearInterval(progressPollingInterval);
                 progressPollingInterval = null;
@@ -253,7 +271,7 @@
 
                 if (data.task_id) {
                     currentTaskId = data.task_id;
-                    openProgressModal();
+                    showInlineProgress();
                     startProgressPolling(data.task_id);
                 }
             } catch (e) {
@@ -263,38 +281,92 @@
 
         function startProgressPolling(taskId) {
             // Initial fetch
-            updateProgress(taskId);
+            updateInlineProgress(taskId);
 
             // Poll every 2 seconds
             progressPollingInterval = setInterval(() => {
-                updateProgress(taskId);
+                updateInlineProgress(taskId);
             }, 2000);
         }
 
-        async function updateProgress(taskId) {
+        async function updateInlineProgress(taskId) {
             try {
                 const response = await fetch(`/api/tasks/${taskId}/progress`);
-                const html = await response.text();
+                const data = await response.json();
 
-                document.getElementById('progress-container').innerHTML = html;
+                const container = document.getElementById('action-progress');
+                const messageEl = container.querySelector('.action-progress__message');
+                const barEl = container.querySelector('.action-progress__bar');
+                const detailEl = container.querySelector('.action-progress__detail');
+                const iconEl = container.querySelector('.action-progress__icon');
 
-                // Check for auto-close
-                const content = document.querySelector('#progress-container .progress-content');
-                if (content && content.dataset.autoClose) {
-                    const delay = parseInt(content.dataset.autoClose, 10);
-                    setTimeout(() => {
-                        closeProgressModal();
-                        // Refresh status bar
-                        htmx.ajax('GET', '/api/status', '.status-section');
-                    }, delay);
+                // Update message
+                messageEl.textContent = data.message || 'Verarbeitung...';
+
+                // Update progress bar
+                barEl.style.width = `${data.percent || 0}%`;
+
+                // Update detail (channel/video info)
+                let detail = '';
+                if (data.current_channel) {
+                    detail = data.current_channel;
+                    if (data.current_video_title) {
+                        detail += ` - ${data.current_video_title}`;
+                    }
+                }
+                detailEl.textContent = detail;
+
+                // Update icon based on phase
+                iconEl.className = 'ph action-progress__icon';
+                if (data.phase === 'completed') {
+                    iconEl.classList.add('ph-check-circle');
+                    iconEl.style.color = '#22c55e';
+                    iconEl.style.animation = 'none';
+                } else if (data.phase === 'failed') {
+                    iconEl.classList.add('ph-x-circle');
+                    iconEl.style.color = '#ef4444';
+                    iconEl.style.animation = 'none';
+                } else {
+                    iconEl.classList.add('ph-spinner');
+                    iconEl.style.color = '';
+                    iconEl.style.animation = '';
+                }
+
+                // Check for completion
+                if (data.phase === 'completed' || data.phase === 'failed') {
                     if (progressPollingInterval) {
                         clearInterval(progressPollingInterval);
                         progressPollingInterval = null;
                     }
+
+                    // Show toast and hide after delay
+                    const toastType = data.phase === 'completed' ? 'success' : 'error';
+                    showToast(data.message, toastType);
+
+                    setTimeout(() => {
+                        hideInlineProgress();
+                        // Refresh status bar and videos list
+                        htmx.ajax('GET', '/api/status', '.status-section');
+                        htmx.ajax('GET', '/api/videos', '#videos-list');
+                    }, 3000);
                 }
             } catch (e) {
                 console.error('Progress update failed:', e);
             }
+        }
+
+        // Legacy modal functions (kept for compatibility)
+        function openProgressModal() {
+            document.getElementById('progress-modal').style.display = 'flex';
+        }
+
+        function closeProgressModal() {
+            document.getElementById('progress-modal').style.display = 'none';
+            if (progressPollingInterval) {
+                clearInterval(progressPollingInterval);
+                progressPollingInterval = null;
+            }
+            currentTaskId = null;
         }
     </script>
 </body>
