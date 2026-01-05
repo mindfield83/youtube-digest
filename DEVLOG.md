@@ -650,6 +650,90 @@ docker ps --filter "name=youtube-digest"
 
 ---
 
+## 2026-01-05 - v1.3.0: Ein-Klick-Digest mit Fortschrittsanzeige
+
+### Was wurde gemacht
+
+- Kombinierter Workflow implementiert: "Digest erstellen" führt jetzt automatisch alle Schritte aus
+- Inline Progress-Anzeige unter den Action-Buttons (statt Modal)
+- `check_for_new` Parameter für `generate_and_send_digest` Task
+- `last_checked` Bug behoben (Zeitstempel wurde nicht aktualisiert)
+- Progress Endpoint von HTML auf JSON umgestellt für JavaScript-Polling
+
+### Erstellte/Geänderte Dateien
+
+| Datei | Änderung |
+|-------|----------|
+| `app/tasks.py` | `_sync_channels_and_fetch_videos()`, `_process_videos_sync()` Helper-Funktionen, `check_for_new` Parameter, `safe_update_state` für Test-Kompatibilität |
+| `app/templates/dashboard.html` | Inline Progress-Container, JavaScript für Progress-Polling |
+| `app/static/dashboard.css` | `.action-progress` Styles |
+| `app/api/routes.py` | JSON-Response statt HTML für Progress-Endpoint |
+| `app/__init__.py` | Version 1.3.0 |
+| `CHANGELOG.md` | v1.3.0 Release Notes |
+
+### Neue Features
+
+#### Ein-Klick-Workflow
+Der "Digest erstellen" Button führt jetzt automatisch aus:
+1. Neue Videos von YouTube abrufen (sync)
+2. Videos verarbeiten (Transkript + KI-Zusammenfassung)
+3. Digest generieren und per E-Mail senden
+
+#### Inline Progress-Anzeige
+- Progress-Bar mit Phasen-Indikator (Sync → Processing → Generate → Send)
+- Aktueller Kanal und Video-Titel während Verarbeitung
+- Automatisches Ausblenden nach Abschluss (3s Delay)
+- Icon wechselt: Spinner → Checkmark/X
+
+### Technische Details
+
+```python
+# Neue Task-Signatur
+@celery_app.task(bind=True, name="app.tasks.generate_and_send_digest")
+def generate_and_send_digest(
+    self,
+    trigger_reason: str = "scheduled",
+    check_for_new: bool = True,  # NEU: Default True
+) -> dict[str, Any]:
+    ...
+
+# Test-kompatibler State-Update
+def safe_update_state(state, meta):
+    if self.request.id:  # Nur wenn im Celery-Kontext
+        self.update_state(state=state, meta=meta)
+```
+
+### Progress-Phasen
+
+| Phase | Prozent | Message |
+|-------|---------|---------|
+| sync | 5-15% | "Prüfe Kanal X/Y..." |
+| processing | 15-50% | "Verarbeite Video X/Y..." |
+| generating_digest | 50-80% | "Generiere Digest..." |
+| sending_email | 90% | "Sende E-Mail..." |
+| completed | 100% | "Digest erfolgreich gesendet!" |
+
+### Behobene Bugs
+
+1. **last_checked nicht aktualisiert**: `channel.last_checked = datetime.now(timezone.utc)` jetzt in `_sync_channels_and_fetch_videos()`
+2. **Test-Fehler bei update_state**: `safe_update_state` prüft `self.request.id` vor Aufruf
+
+### Commits
+
+- `feat(v1.3.0): one-click digest with inline progress indicator`
+
+### Deployment
+
+```bash
+# Contabo VPS
+cd /home/raguser/youtube-digest
+git pull
+docker compose up -d --build
+# Health: {"status":"healthy","version":"1.3.0"}
+```
+
+---
+
 ## Template für weitere Einträge
 
 ```markdown
