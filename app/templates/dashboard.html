@@ -206,6 +206,24 @@
             }
         }
 
+        // Resend digest handler
+        function handleResendResponse(event) {
+            try {
+                const response = JSON.parse(event.detail.xhr.responseText);
+                if (response.success) {
+                    showToast(response.message, 'success');
+                } else {
+                    showToast(response.message || 'Erneutes Senden fehlgeschlagen', 'error');
+                }
+            } catch (e) {
+                if (event.detail.xhr.status >= 400) {
+                    showToast('Fehler beim erneuten Senden des Digests', 'error');
+                } else {
+                    showToast('Digest wird gesendet...', 'info');
+                }
+            }
+        }
+
         // Progress modal
         let progressPollingInterval = null;
         let currentTaskId = null;

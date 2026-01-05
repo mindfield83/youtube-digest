@@ -495,7 +495,7 @@ async def get_videos_html(
     <div class="pagination-nav">
         <button class="pagination-btn {prev_disabled}"
                 hx-get="/api/videos?{base_query}&page={prev_page}"
-                hx-target="#videos-content"
+                hx-target="#videos-list"
                 hx-swap="innerHTML"
                 {'disabled' if page <= 1 else ''}>
             <i class="ph ph-caret-left"></i> Vorherige
@@ -503,10 +503,10 @@ async def get_videos_html(
         <span class="pagination-info">Seite {page} von {total_pages}</span>
         <button class="pagination-btn {next_disabled}"
                 hx-get="/api/videos?{base_query}&page={next_page}"
-                hx-target="#videos-content"
+                hx-target="#videos-list"
                 hx-swap="innerHTML"
                 {'disabled' if page >= total_pages else ''}>
-            Naechste <i class="ph ph-caret-right"></i>
+            Nächste <i class="ph ph-caret-right"></i>
         </button>
     </div>
     """
@@ -592,6 +592,68 @@ async def get_channels_html(db: Session = Depends(get_db)):
     return HTMLResponse(content=html)
 
 
+@router.post("/api/digests/{digest_id}/resend", tags=["Digests"])
+async def resend_digest(digest_id: int, db: Session = Depends(get_db)):
+    """
+    Resend an existing digest email.
+
+    Regenerates the digest HTML using the videos that were included
+    in the original digest and sends it again.
+    """
+    from app.services.digest_generator import DigestGenerator
+    from app.services.email_service import EmailService
+
+    # Find the digest
+    digest = db.query(DigestHistory).filter(DigestHistory.id == digest_id).first()
+    if not digest:
+        raise HTTPException(status_code=404, detail="Digest nicht gefunden")
+
+    # Get videos that were included in this digest
+    videos = db.query(ProcessedVideo).filter(
+        ProcessedVideo.included_in_digest_id == digest_id
+    ).order_by(ProcessedVideo.published_at.desc()).all()
+
+    if not videos:
+        raise HTTPException(
+            status_code=400,
+            detail="Keine Videos für diesen Digest gefunden"
+        )
+
+    # Build channel map
+    channel_ids = list(set(v.channel_id for v in videos))
+    channels = db.query(Channel).filter(Channel.channel_id.in_(channel_ids)).all()
+    channel_map = {c.channel_id: c.channel_name for c in channels}
+
+    try:
+        # Generate digest HTML
+        digest_gen = DigestGenerator()
+        html_content, plain_content = digest_gen.generate(videos, channel_map)
+
+        # Send email
+        email_service = EmailService()
+        result = email_service.send_digest(
+            html_content=html_content,
+            plain_content=plain_content,
+            subject=f"YouTube Digest - {len(videos)} Videos (erneut gesendet)",
+        )
+
+        if result.success:
+            logger.info(f"Digest {digest_id} resent successfully")
+            return {
+                "success": True,
+                "message": f"Digest mit {len(videos)} Videos erneut gesendet",
+            }
+        else:
+            logger.error(f"Resend failed for digest {digest_id}: {result.message}")
+            return {
+                "success": False,
+                "message": f"E-Mail-Versand fehlgeschlagen: {result.message}",
+            }
+    except Exception as e:
+        logger.error(f"Error resending digest {digest_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Fehler: {str(e)}")
+
+
 @router.get("/api/digests", response_class=HTMLResponse, tags=["HTMX Partials"])
 async def get_digests_html(db: Session = Depends(get_db)):
     """Return digest history as HTML partial for HTMX."""
@@ -622,6 +684,17 @@ async def get_digests_html(db: Session = Depends(get_db)):
         trigger = trigger_labels.get(d.trigger_reason, d.trigger_reason or "-")
         status_icon, status_text = status_labels.get(d.email_status, ("❓", d.email_status))
 
+        # Resend button with HTMX
+        resend_btn = f"""
+        <button class="btn-resend"
+                hx-post="/api/digests/{d.id}/resend"
+                hx-swap="none"
+                hx-on::after-request="handleResendResponse(event)"
+                title="Digest erneut senden">
+            <i class="ph ph-paper-plane-tilt"></i>
+        </button>
+        """
+
         rows.append(f"""
         <tr>
             <td>{sent_date}</td>
@@ -630,6 +703,7 @@ async def get_digests_html(db: Session = Depends(get_db)):
             <td>{duration}</td>
             <td>{trigger}</td>
             <td title="{status_text}">{status_icon}</td>
+            <td>{resend_btn}</td>
         </tr>
         """)
 
@@ -644,6 +718,7 @@ async def get_digests_html(db: Session = Depends(get_db)):
                 <th>Gesamtdauer</th>
                 <th>Auslöser</th>
                 <th>Status</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
