@@ -456,15 +456,19 @@ async def get_videos_html(
 
         cards.append(f"""
         <article class="video-card">
-            <div class="video-card__thumbnail">
-                <img src="{thumbnail}" alt="" loading="lazy">
-                <span class="video-card__duration">{duration}</span>
+            <div class="video-card__header">
+                <div class="video-card__thumbnail">
+                    <img src="{thumbnail}" alt="" loading="lazy">
+                    <span class="video-card__duration">{duration}</span>
+                </div>
+                <div class="video-card__header-content">
+                    <h3 class="video-card__title">
+                        <a href="https://youtube.com/watch?v={v.video_id}" target="_blank">{v.title}</a>
+                    </h3>
+                    <div class="video-card__meta">{channel_name} | {pub_date}</div>
+                </div>
             </div>
-            <div class="video-card__content">
-                <h3 class="video-card__title">
-                    <a href="https://youtube.com/watch?v={v.video_id}" target="_blank">{v.title}</a>
-                </h3>
-                <div class="video-card__meta">{channel_name} | {pub_date}</div>
+            <div class="video-card__body">
                 {f'<div class="video-card__summary">{summary_html}</div>' if summary_html else ''}
                 <div class="video-card__badges">
                     <span class="category-badge">{category_display}</span>
