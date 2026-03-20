@@ -2,6 +2,22 @@
 
 Projektspezifische Anweisungen für Claude Code.
 
+---
+
+## KRITISCH: Planmodus-Recherche
+
+**Bevor ExitPlanMode aufgerufen wird, MUSS folgendes passiert sein:**
+
+- [ ] Sequential-Thinking fuer Problemanalyse
+- [ ] Perplexity-Recherche fuer aktuelle Best Practices
+- [ ] Bright Data Scraping relevanter Dokumentation
+
+**Skill-Invocation:** `Use the plan-research skill` oder `/plan-research [TASK]`
+
+Siehe: Globale CLAUDE.md → "PLANMODUS-PFLICHT"
+
+---
+
 ## Projektübersicht
 
 **YouTube Digest** ist ein selbst-gehosteter, automatisierter Workflow, der YouTube-Abonnements überwacht und regelmäßig AI-generierte Zusammenfassungen neuer Videos per E-Mail versendet.
@@ -20,7 +36,7 @@ Projektspezifische Anweisungen für Claude Code.
 | **Backend** | FastAPI + Python 3.11 |
 | **Task Queue** | Celery + Redis |
 | **Database** | PostgreSQL 16 Alpine |
-| **AI/LLM** | Google Gemini 2.0 Flash (`gemini-2.0-flash`) |
+| **AI/LLM** | Google Gemini 3 Flash (`gemini-3-flash`, konfigurierbar via `GEMINI_MODEL`) |
 | **Transcripts** | youtube-transcript-api v1.x + Supadata (Fallback) |
 | **Email** | Resend API |
 | **Container** | Docker Compose (5 Services) |

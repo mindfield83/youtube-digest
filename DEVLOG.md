@@ -4,6 +4,46 @@ Chronologische Dokumentation der Entwicklung.
 
 ---
 
+## 2026-03-20 - Pipeline-Reparatur (v1.3.1)
+
+### Ausgangslage
+- Pipeline seit 74 Tagen komplett nicht funktional (seit ~2026-01-12)
+- OAuth Token abgelaufen wegen Google Cloud App im "Testing"-Status (7-Tage Expiry)
+- Kein einziger automatischer Digest jemals versendet — alle 3 bestehenden waren manuell
+
+### Root Cause Chain
+```
+OAuth Token expired → check_for_new_videos FAILS →
+keine neuen Videos → generate_and_send_digest FAILS (ruft YouTubeService auf) →
+selbst vorhandene completed Videos werden nicht als Digest gesendet
+```
+
+### Fixes (4 Commits)
+1. **Gemini Model aus Config**: Hardcoded `gemini-3-flash-preview` → `settings.gemini_model` (Default: `gemini-3-flash`)
+2. **Graceful OAuth-Error**: try/except um Sync-Phase in `generate_and_send_digest` — fällt zurück auf vorhandene Videos
+3. **Neue `check_digest_conditions` Task**: Täglicher Check um 07:00 UTC — requeued stuck Videos, prüft Threshold/Zeit, triggert Digest
+4. **Beat Schedule**: Sekunden-Intervalle → crontab (06:00 + 07:00 UTC)
+5. **Race Condition**: `process_video.delay()` nach `db.commit()` statt davor
+6. **Video-Details**: `check_for_new_videos` ruft jetzt `get_video_details()` auf — Duration + Livestream-Filter funktionieren
+
+### Infrastruktur
+- Worker + Beat Healthchecks in docker-compose.yml
+- `docker-compose.override.yml` mit kaputten `pgrep`-Healthchecks entfernt
+- Beat bekommt jetzt APP_ENV + LOG_LEVEL
+
+### E2E-Verifikation
+- 5/5 Container healthy
+- OAuth mit richtigem Account (mindfield.demo@gmail.com)
+- 12 Kanäle korrekt abonniert
+- 116 Videos verarbeitet, 2 Test-Digests erfolgreich versendet
+- Gemini 3 Flash Structured Output funktioniert
+
+### Nächste Schritte
+- OAuth Token sollte nicht mehr ablaufen (App published)
+- Dashboard-basierter OAuth-Flow wäre nice-to-have (Phase 3 aus Plan)
+
+---
+
 ## 2026-01-03 - Projektstart & Batch 1
 
 ### Was wurde gemacht

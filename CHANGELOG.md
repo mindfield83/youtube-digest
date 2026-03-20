@@ -3,6 +3,30 @@
 Alle wichtigen Änderungen werden hier dokumentiert.
 Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
+## [1.3.1] - 2026-03-20
+
+### Behoben
+
+- **OAuth Token Expiry**: Google Cloud App von "Testing" auf "Published" gestellt — Refresh Tokens laufen nicht mehr nach 7 Tagen ab
+- **Gemini Model hardcoded**: `gemini-3-flash-preview` war hardcoded statt aus Config — nutzt jetzt `settings.gemini_model`
+- **Digest crashte bei OAuth-Fehler**: `generate_and_send_digest` scheiterte komplett wenn `_sync_channels_and_fetch_videos()` fehlschlug — jetzt try/except mit graceful Fallback auf vorhandene Videos
+- **Race Condition**: `process_video.delay()` wurde vor `db.commit()` aufgerufen, Worker fanden Videos nicht in DB — Dispatch jetzt nach Commit
+- **Fehlende Video-Details**: `check_for_new_videos` rief `get_video_details()` nicht auf — alle Videos hatten `duration_seconds=0`, <2min Filter und Livestream-Filter griffen nicht
+- **Beat Healthcheck**: `docker-compose.override.yml` nutzte `pgrep` (nicht im Image) — Override entfernt, korrekte Healthchecks in Haupt-Compose
+- **Beat Env-Vars fehlten**: `APP_ENV` und `LOG_LEVEL` im Beat-Container ergänzt
+
+### Hinzugefügt
+
+- **`check_digest_conditions` Task**: Täglicher Check um 07:00 UTC — prüft Video-Threshold (>=10) und Zeit-Threshold (>=14 Tage), requeued stuck pending Videos
+- **Worker Healthcheck**: `celery inspect ping` Healthcheck für Worker-Container
+- **Beat Healthcheck**: Schedule-File-basierter Healthcheck für Beat-Container
+
+### Geändert
+
+- **Gemini Model**: Default von `gemini-2.0-flash` auf `gemini-3-flash` (neuestes stabiles Flash-Modell)
+- **Beat Schedule**: Von Sekunden-Intervallen (86400s/1209600s) auf `crontab` (06:00/07:00 UTC) umgestellt
+- **Digest Trigger**: `generate-digest-biweekly` Schedule entfernt — wird jetzt intelligent durch `check_digest_conditions` getriggert
+
 ## [1.3.0] - 2026-01-05
 
 ### Hinzugefügt
