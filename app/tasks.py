@@ -74,6 +74,14 @@ def check_for_new_videos(self) -> dict[str, Any]:
                     videos = youtube.get_channel_videos(channel_id, since_date)
                     channels_checked += 1
 
+                    if not videos:
+                        continue
+
+                    # Get video details (duration, live status) for filtering
+                    vid_ids = [v["video_id"] for v in videos if v.get("video_id")]
+                    video_details = youtube.get_video_details(vid_ids)
+                    details_map = {v["video_id"]: v for v in video_details}
+
                     for video in videos:
                         video_id = video["video_id"]
 
@@ -85,15 +93,35 @@ def check_for_new_videos(self) -> dict[str, Any]:
                         if existing:
                             continue
 
+                        # Get details for duration and live status filtering
+                        details = details_map.get(video_id, {})
+                        duration = details.get("duration_seconds", 0)
+
+                        # Skip short videos (< 2 min) and livestreams
+                        if duration < 120:
+                            continue
+                        if details.get("liveStreamingDetails"):
+                            continue
+
+                        # Parse published_at
+                        published_at = video.get("published_at")
+                        if isinstance(published_at, str):
+                            try:
+                                published_at = datetime.fromisoformat(
+                                    published_at.replace("Z", "+00:00")
+                                )
+                            except ValueError:
+                                published_at = datetime.now(timezone.utc)
+
                         # Create pending video record
                         new_video = ProcessedVideo(
                             video_id=video_id,
                             channel_id=channel_id,
                             title=video.get("title", ""),
                             description=video.get("description", ""),
-                            duration_seconds=video.get("duration_seconds", 0),
-                            published_at=video.get("published_at", datetime.now(timezone.utc)),
-                            thumbnail_url=video.get("thumbnail"),
+                            duration_seconds=duration,
+                            published_at=published_at,
+                            thumbnail_url=details.get("thumbnail_url") or video.get("thumbnail"),
                             processing_status="pending",
                         )
                         db.add(new_video)
