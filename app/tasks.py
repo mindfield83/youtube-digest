@@ -43,6 +43,7 @@ def check_for_new_videos(self) -> dict[str, Any]:
         channels_checked = 0
         new_videos_found = 0
         videos_queued = 0
+        new_video_ids = []
 
         with SessionLocal() as db:
             # Calculate date range (check last 2 days to handle timezone issues)
@@ -96,13 +97,8 @@ def check_for_new_videos(self) -> dict[str, Any]:
                             processing_status="pending",
                         )
                         db.add(new_video)
-                        db.flush()
-
+                        new_video_ids.append(video_id)
                         new_videos_found += 1
-
-                        # Queue for processing
-                        process_video.delay(video_id)
-                        videos_queued += 1
 
                 except Exception as e:
                     logger.warning(f"Error fetching videos for {channel_id}: {e}")
@@ -113,6 +109,11 @@ def check_for_new_videos(self) -> dict[str, Any]:
                 {"last_checked": datetime.now(timezone.utc)}
             )
             db.commit()
+
+        # Queue processing AFTER commit so workers can find the videos
+        for video_id in new_video_ids:
+            process_video.delay(video_id)
+            videos_queued += 1
 
         # Check if threshold reached for digest
         with SessionLocal() as db:
