@@ -1,6 +1,7 @@
 # app/celery_app.py
 """Celery application configuration for YouTube Digest."""
 from celery import Celery
+from celery.schedules import crontab
 
 from app.config import get_settings
 
@@ -36,11 +37,11 @@ celery_app.conf.update(
     beat_schedule={
         "check-for-new-videos-daily": {
             "task": "app.tasks.check_for_new_videos",
-            "schedule": 86400.0,  # 24 hours in seconds
+            "schedule": crontab(hour=6, minute=0),  # 06:00 UTC
         },
-        "generate-digest-biweekly": {
-            "task": "app.tasks.generate_and_send_digest",
-            "schedule": 1209600.0,  # 14 days in seconds
+        "check-digest-conditions-daily": {
+            "task": "app.tasks.check_digest_conditions",
+            "schedule": crontab(hour=7, minute=0),  # 07:00 UTC
         },
     },
 

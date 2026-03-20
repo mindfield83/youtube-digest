@@ -66,6 +66,8 @@ services:
       - RESEND_API_KEY=${RESEND_API_KEY}
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-YouTube Digest <digest@resend.dev>}
       - EMAIL_TO_ADDRESS=${EMAIL_TO_ADDRESS:-niko.huebner@gmail.com}
+      - APP_ENV=production
+      - LOG_LEVEL=INFO
     volumes:
       - ./credentials:/app/credentials
     depends_on:
@@ -75,6 +77,12 @@ services:
         condition: service_healthy
     networks:
       - youtube-digest-net
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app inspect ping --timeout 10 2>/dev/null | grep -q OK"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
 
   # ==========================================================================
   # Celery Beat Scheduler
@@ -89,12 +97,20 @@ services:
     environment:
       - DATABASE_URL=postgresql://youtube_digest:${POSTGRES_PASSWORD:-youtube_digest_secret}@db:5432/youtube_digest
       - REDIS_URL=redis://redis:6379/0
+      - APP_ENV=production
+      - LOG_LEVEL=INFO
     volumes:
       - celerybeat_data:/var/run/celery
     depends_on:
       - worker
     networks:
       - youtube-digest-net
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app inspect ping --timeout 10 2>/dev/null | grep -q OK || test -f /var/run/celery/celerybeat-schedule"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
 
   # ==========================================================================
   # PostgreSQL Database

@@ -22,7 +22,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # Model configuration
-GEMINI_MODEL = "gemini-3-flash-preview"
+GEMINI_MODEL = settings.gemini_model
 
 # Chunking configuration
 MAX_TRANSCRIPT_CHARS = 500_000  # ~125k tokens

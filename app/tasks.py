@@ -499,22 +499,27 @@ def generate_and_send_digest(
                 }
             )
 
-            # Run sync logic inline (not as separate task)
-            new_video_ids = _sync_channels_and_fetch_videos(self, safe_update_state)
+            try:
+                # Run sync logic inline (not as separate task)
+                new_video_ids = _sync_channels_and_fetch_videos(self, safe_update_state)
 
-            # Phase 2: Process new videos
-            if new_video_ids:
-                safe_update_state(
-                    state="PROGRESS",
-                    meta={
-                        "phase": "processing",
-                        "current": 0,
-                        "total": len(new_video_ids),
-                        "percent": 15,
-                        "message": f"{len(new_video_ids)} Videos werden verarbeitet...",
-                    }
+                # Phase 2: Process new videos
+                if new_video_ids:
+                    safe_update_state(
+                        state="PROGRESS",
+                        meta={
+                            "phase": "processing",
+                            "current": 0,
+                            "total": len(new_video_ids),
+                            "percent": 15,
+                            "message": f"{len(new_video_ids)} Videos werden verarbeitet...",
+                        }
+                    )
+                    _process_videos_sync(self, new_video_ids, safe_update_state)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to sync/fetch new videos (continuing with existing): {e}"
                 )
-                _process_videos_sync(self, new_video_ids, safe_update_state)
 
         # Update progress: initializing digest generation
         safe_update_state(
@@ -846,3 +851,100 @@ def sync_channel_metadata(self, fetch_videos: bool = True) -> dict[str, Any]:
     except Exception as e:
         logger.error(f"Error in sync_channel_metadata: {e}")
         raise self.retry(exc=e, countdown=60, max_retries=2)
+
+
+@celery_app.task(bind=True, name="app.tasks.check_digest_conditions")
+def check_digest_conditions(self) -> dict[str, Any]:
+    """
+    Check if conditions are met to send a digest, and requeue stuck pending videos.
+
+    Runs daily via Celery Beat at 07:00 UTC (after check_for_new_videos at 06:00).
+
+    Conditions for triggering a digest:
+    1. Video threshold: >= digest_video_threshold completed videos not yet in a digest
+    2. Time threshold: >= digest_interval_days since last digest AND at least 1 completed video
+
+    Also requeues pending videos that are older than 1 hour (stuck processing).
+
+    Returns:
+        dict with status, pending_requeued, completed_count, digest_triggered
+    """
+    logger.info("Checking digest conditions")
+
+    pending_requeued = 0
+    digest_triggered = False
+
+    try:
+        with SessionLocal() as db:
+            # Requeue stuck pending videos (older than 1 hour)
+            stuck_cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+            stuck_videos = db.query(ProcessedVideo).filter(
+                and_(
+                    ProcessedVideo.processing_status.in_(["pending", "processing"]),
+                    ProcessedVideo.published_at < stuck_cutoff,
+                )
+            ).all()
+
+            for video in stuck_videos:
+                video.processing_status = "pending"
+                video.error_message = None
+                pending_requeued += 1
+                process_video.delay(video.video_id)
+                logger.info(f"Requeued stuck video: {video.video_id} ({video.title})")
+
+            if pending_requeued:
+                db.commit()
+
+            # Count completed videos not yet in a digest
+            completed_count = db.query(ProcessedVideo).filter(
+                and_(
+                    ProcessedVideo.processing_status == "completed",
+                    ProcessedVideo.included_in_digest_id.is_(None),
+                )
+            ).count()
+
+            # Check threshold condition
+            if completed_count >= settings.digest_video_threshold:
+                logger.info(
+                    f"Video threshold reached: {completed_count} >= {settings.digest_video_threshold}"
+                )
+                generate_and_send_digest.delay(
+                    trigger_reason="threshold",
+                    check_for_new=False,
+                )
+                digest_triggered = True
+
+            # Check time condition
+            elif completed_count > 0:
+                last_digest = db.query(DigestHistory).order_by(
+                    DigestHistory.sent_at.desc()
+                ).first()
+
+                if last_digest and last_digest.sent_at:
+                    days_since = (datetime.now(timezone.utc) - last_digest.sent_at).days
+                else:
+                    days_since = settings.digest_interval_days  # No digest ever sent
+
+                if days_since >= settings.digest_interval_days:
+                    logger.info(
+                        f"Time threshold reached: {days_since} days since last digest, "
+                        f"{completed_count} videos ready"
+                    )
+                    generate_and_send_digest.delay(
+                        trigger_reason="scheduled",
+                        check_for_new=False,
+                    )
+                    digest_triggered = True
+
+        result = {
+            "status": "completed",
+            "pending_requeued": pending_requeued,
+            "completed_count": completed_count,
+            "digest_triggered": digest_triggered,
+        }
+        logger.info(f"Digest conditions check: {result}")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error in check_digest_conditions: {e}")
+        raise self.retry(exc=e, countdown=300, max_retries=2)
