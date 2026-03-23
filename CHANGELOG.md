@@ -3,6 +3,20 @@
 Alle wichtigen Änderungen werden hier dokumentiert.
 Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
+## [1.3.2] - 2026-03-23
+
+### Behoben
+
+- **Supadata Rate Limit Handling**: 64 Videos scheiterten weil Supadata HTTP 429 als normaler Fehler behandelt und zu YouTube durchfiel (von VPS-IP geblockt) — neuer `RateLimitError` propagiert direkt zu Celery für längeren Retry
+- **Video-Burst bei Dispatch**: Alle Videos wurden gleichzeitig zur Verarbeitung dispatcht, überlastete Supadata Rate Limit — jetzt 30s Staggering zwischen Videos via `apply_async(countdown=idx*30)`
+- **Rate Limit Backoff zu kurz**: Celery Retry bei Rate Limit war 1/2/4 Min. — jetzt 5/10/20 Min.
+- **13 kaputte Unit Tests repariert**: Auth-Bypass in Test-Client, veraltete Mocks (`delay` → `apply_async`, `fetch_transcript` → `get_transcript`), falsche Transcript-Reihenfolge, Duration-Threshold (120s statt 60s)
+
+### Hinzugefuegt
+
+- **`POST /api/reprocess-failed`**: Endpoint zum erneuten Verarbeiten aller fehlgeschlagenen Videos mit gestaffeltem Dispatch
+- **Throttling in Sync-Verarbeitung**: 10s Pause zwischen Videos in `_process_videos_sync`
+
 ## [1.3.1] - 2026-03-20
 
 ### Behoben

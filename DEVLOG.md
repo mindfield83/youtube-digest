@@ -4,6 +4,36 @@ Chronologische Dokumentation der Entwicklung.
 
 ---
 
+## 2026-03-23 - Rate Limit Resilience (v1.3.2)
+
+### Ausgangslage
+
+64 Videos fehlgeschlagen nach den v1.3.1 Fixes. Alle aktuellen Videos mit `status=failed`.
+
+### Analyse
+
+- **Supadata API**: HTTP 429 (Rate Limit exceeded) fuer alle Videos
+- **YouTube Transcript API**: IP-Block von Contabo VPS (Cloud Provider)
+- **Fehlerkette**: Supadata 429 → YouTube-Fallthrough (geblockt) → TranscriptNotAvailable → Celery Retry (zu kurz) → erneut 429 → Loop
+
+Root Cause: Kein Staggering beim Video-Dispatch, kein Rate-Limit-spezifisches Error-Handling.
+
+### Loesung
+
+1. **RateLimitError**: Eigene Exception-Klasse, propagiert direkt zu Celery statt YouTube-Fallthrough
+2. **Staggered Dispatch**: 30s Abstand zwischen Videos (`apply_async(countdown=idx*30)`)
+3. **Laengerer Backoff**: 5/10/20 Min. bei Rate Limit statt 1/2/4 Min.
+4. **Reprocess Endpoint**: `POST /api/reprocess-failed` fuer Batch-Retry
+5. **13 Unit Tests repariert**: Auth-Bypass, veraltete Mocks, falsche Reihenfolge
+
+### Ergebnis
+
+- 139/139 Unit Tests gruen
+- 64 Videos requeued mit Staggering
+- Deploy auf Contabo erfolgreich
+
+---
+
 ## 2026-03-20 - Pipeline-Reparatur (v1.3.1)
 
 ### Ausgangslage

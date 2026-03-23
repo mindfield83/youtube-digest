@@ -174,6 +174,7 @@ docker-compose logs -f worker
 | `/api/trigger-digest` | POST | Manueller Digest-Trigger |
 | `/api/tasks/{id}/progress` | GET | Task-Fortschritt (JSON für JS-Polling) |
 | `/api/test-email` | POST | Test-E-Mail senden |
+| `/api/reprocess-failed` | POST | Fehlgeschlagene Videos erneut verarbeiten (mit 30s Staggering) |
 | `/api/oauth/status` | GET | OAuth Token Status |
 
 ## Deployment
@@ -236,7 +237,7 @@ Videos werden ignoriert wenn:
 
 | Test-Typ | Status | Details |
 |----------|--------|---------|
-| Unit Tests | ✅ 138/138 | 19.97s |
+| Unit Tests | ✅ 139/139 | 23s |
 | E2E Tests | ✅ 5/5 | YouTube API, Transcript, Gemini, Celery |
 | API Endpoints | ✅ 6/6 | Health, Status, OAuth, Channels, Videos, Digests |
 
