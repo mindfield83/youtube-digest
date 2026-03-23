@@ -25,7 +25,7 @@ from app.api.schemas import (
 )
 from app.celery_app import celery_app
 from app.models import Channel, DigestHistory, OAuthToken, ProcessedVideo, get_db
-from app.tasks import generate_and_send_digest, sync_channel_metadata
+from app.tasks import generate_and_send_digest, process_video, sync_channel_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -830,6 +830,52 @@ async def send_test_email():
             "success": False,
             "message": f"Fehler: {str(e)}",
         }
+
+
+# ============================================================================
+# Reprocess Failed Videos
+# ============================================================================
+
+
+@router.post("/api/reprocess-failed", tags=["Videos"])
+async def reprocess_failed_videos(db: Session = Depends(get_db)):
+    """
+    Reset all failed videos to pending and requeue with staggered dispatch.
+
+    Uses 30s intervals between videos to avoid Supadata rate limits.
+    """
+    failed_videos = db.query(ProcessedVideo).filter(
+        ProcessedVideo.processing_status == "failed"
+    ).all()
+
+    if not failed_videos:
+        return {
+            "success": True,
+            "requeued": 0,
+            "message": "Keine fehlgeschlagenen Videos gefunden",
+        }
+
+    for video in failed_videos:
+        video.processing_status = "pending"
+        video.error_message = None
+        video.retry_count = 0
+
+    db.commit()
+
+    # Staggered dispatch (30s between each video)
+    for idx, video in enumerate(failed_videos):
+        process_video.apply_async(args=[video.video_id], countdown=idx * 30)
+
+    total = len(failed_videos)
+    estimated_minutes = (total * 30) // 60
+
+    logger.info(f"Requeued {total} failed videos with 30s staggering")
+
+    return {
+        "success": True,
+        "requeued": total,
+        "message": f"{total} Videos zur erneuten Verarbeitung eingeplant (~{estimated_minutes} Min.)",
+    }
 
 
 # ============================================================================

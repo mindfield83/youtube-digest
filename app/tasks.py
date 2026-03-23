@@ -1,6 +1,7 @@
 # app/tasks.py
 """Celery tasks for YouTube Digest workflow."""
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -17,7 +18,7 @@ from app.models import (
 from app.services.digest_generator import DigestGenerator
 from app.services.email_service import EmailService
 from app.services.summarization_service import SummarizationService
-from app.services.transcript_service import TranscriptService
+from app.services.transcript_service import RateLimitError, TranscriptService
 from app.services.youtube_service import YouTubeService
 
 logger = logging.getLogger(__name__)
@@ -138,9 +139,9 @@ def check_for_new_videos(self) -> dict[str, Any]:
             )
             db.commit()
 
-        # Queue processing AFTER commit so workers can find the videos
-        for video_id in new_video_ids:
-            process_video.delay(video_id)
+        # Queue processing AFTER commit — stagger to avoid Supadata rate limits
+        for idx, video_id in enumerate(new_video_ids):
+            process_video.apply_async(args=[video_id], countdown=idx * 30)
             videos_queued += 1
 
         # Check if threshold reached for digest
@@ -261,8 +262,11 @@ def process_video(self, video_id: str) -> dict[str, Any]:
     except Exception as e:
         logger.error(f"Error processing video {video_id}: {e}")
 
-        # Retry with exponential backoff
-        countdown = 60 * (2 ** self.request.retries)  # 1min, 2min, 4min
+        # Rate limit → longer backoff (5min, 10min, 20min)
+        if isinstance(e, RateLimitError) or "rate limit" in str(e).lower():
+            countdown = 300 * (2 ** self.request.retries)
+        else:
+            countdown = 60 * (2 ** self.request.retries)  # 1min, 2min, 4min
         raise self.retry(exc=e, countdown=countdown, max_retries=3)
 
 
@@ -449,6 +453,10 @@ def _process_videos_sync(task, video_ids: list[str], update_state_fn) -> None:
             db.commit()
 
             try:
+                # Throttle: wait between consecutive requests to avoid rate limits
+                if idx > 0:
+                    time.sleep(10)
+
                 # Fetch transcript
                 transcript_result = transcript_service.get_transcript(video_id)
                 video.transcript = transcript_result.text
@@ -862,9 +870,9 @@ def sync_channel_metadata(self, fetch_videos: bool = True) -> dict[str, Any]:
             # Commit all changes BEFORE queueing tasks
             db.commit()
 
-        # Queue video processing AFTER commit (outside the db context)
-        for video_id in video_ids_to_process:
-            process_video.delay(video_id)
+        # Queue video processing AFTER commit — stagger to avoid Supadata rate limits
+        for idx, video_id in enumerate(video_ids_to_process):
+            process_video.apply_async(args=[video_id], countdown=idx * 30)
             videos_queued += 1
 
         result = {

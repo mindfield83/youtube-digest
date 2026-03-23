@@ -48,6 +48,11 @@ class SupadataError(TranscriptError):
     pass
 
 
+class RateLimitError(TranscriptError):
+    """Rate limit hit — retry later, don't fall through to blocked YouTube."""
+    pass
+
+
 @dataclass
 class TranscriptResult:
     """Result of transcript fetching."""
@@ -283,8 +288,9 @@ class TranscriptService:
                 return None
 
             if response.status_code == 429:
-                logger.warning("Supadata: Rate limit exceeded")
-                raise SupadataError("Rate limit exceeded")
+                retry_after = response.headers.get("Retry-After", "unknown")
+                logger.warning(f"Supadata: Rate limit exceeded (Retry-After: {retry_after})")
+                raise RateLimitError(f"Rate limit exceeded (Retry-After: {retry_after})")
 
             response.raise_for_status()
             data = response.json()
@@ -325,7 +331,7 @@ class TranscriptService:
 
             return None
 
-        except SupadataError:
+        except (SupadataError, RateLimitError):
             # Re-raise our own errors
             raise
         except httpx.HTTPStatusError as e:
@@ -377,6 +383,10 @@ class TranscriptService:
                         result.text = format_transcript_with_timestamps(result.segments)
 
                     return result
+            except RateLimitError:
+                # Don't fall through to YouTube (blocked from VPS IPs anyway)
+                # Let Celery handle retry with longer backoff
+                raise
             except SupadataError as e:
                 logger.warning(f"Supadata error for {video_id}: {e}")
 

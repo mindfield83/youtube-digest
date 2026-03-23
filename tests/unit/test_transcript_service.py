@@ -10,6 +10,7 @@ from app.services.transcript_service import (
     TranscriptError,
     TranscriptNotAvailable,
     SupadataError,
+    RateLimitError,
     format_transcript_with_timestamps,
     format_transcript_plain,
 )
@@ -203,16 +204,17 @@ class TestTranscriptService:
         assert result is None
 
     def test_get_transcript_supadata_rate_limit(self, service):
-        """Should raise SupadataError for rate limit."""
+        """Should raise RateLimitError for rate limit."""
         mock_response = Mock()
         mock_response.status_code = 429
+        mock_response.headers = {"Retry-After": "60"}
 
         mock_client = Mock()
         mock_client.get.return_value = mock_response
 
         service._http_client = mock_client
 
-        with pytest.raises(SupadataError) as exc:
+        with pytest.raises(RateLimitError) as exc:
             service.get_transcript_supadata("test_video")
 
         assert "Rate limit" in str(exc.value)
