@@ -54,6 +54,10 @@ class TestCheckForNewVideos:
         mock_yt.get_channel_videos.return_value = [
             {"video_id": "vid1", "title": "Test Video"}
         ]
+        # Mock get_video_details to return valid duration (>= 120s)
+        mock_yt.get_video_details.return_value = [
+            {"video_id": "vid1", "duration_seconds": 600}
+        ]
         mock_yt_service.return_value = mock_yt
 
         mock_db = MagicMock()
@@ -63,9 +67,9 @@ class TestCheckForNewVideos:
 
         mock_settings.digest_video_threshold = 10
 
-        with patch.object(process_video, "delay") as mock_delay:
+        with patch.object(process_video, "apply_async") as mock_async:
             check_for_new_videos()
-            mock_delay.assert_called_once_with("vid1")
+            mock_async.assert_called_once_with(args=["vid1"], countdown=0)
 
 
 class TestProcessVideo:
@@ -81,7 +85,7 @@ class TestProcessVideo:
         from app.tasks import process_video
 
         mock_trans = MagicMock()
-        mock_trans.fetch_transcript.return_value = MagicMock(
+        mock_trans.get_transcript.return_value = MagicMock(
             text="Test transcript",
             language="de",
             source="youtube"
@@ -120,7 +124,7 @@ class TestProcessVideo:
         result = process_video("vid1")
 
         assert result["status"] == "completed"
-        mock_trans.fetch_transcript.assert_called_once_with("vid1")
+        mock_trans.get_transcript.assert_called_once_with("vid1")
         mock_sum.summarize_video.assert_called_once()
 
 

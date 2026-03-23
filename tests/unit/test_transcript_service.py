@@ -227,53 +227,53 @@ class TestTranscriptService:
             result = service.get_transcript_supadata("test_video")
             assert result is None
 
-    def test_get_transcript_youtube_first(self, service):
-        """Should try YouTube before Supadata."""
-        youtube_result = TranscriptResult(
-            video_id="test",
-            text="YouTube transcript",
-            language="de",
-            source="youtube",
-        )
-
-        with patch.object(service, 'get_transcript_youtube', return_value=youtube_result) as mock_yt:
-            with patch.object(service, 'get_transcript_supadata') as mock_sd:
-                result = service.get_transcript("test_video")
-
-        mock_yt.assert_called_once()
-        mock_sd.assert_not_called()
-        assert result.source == "youtube"
-
-    def test_get_transcript_fallback_to_supadata(self, service):
-        """Should use Supadata when YouTube fails."""
+    def test_get_transcript_supadata_first(self, service):
+        """Should try Supadata before YouTube (primary source)."""
         supadata_result = TranscriptResult(
             video_id="test",
             text="Supadata transcript",
-            language="en",
+            language="de",
             source="supadata",
         )
 
-        with patch.object(service, 'get_transcript_youtube', return_value=None):
-            with patch.object(service, 'get_transcript_supadata', return_value=supadata_result):
+        with patch.object(service, 'get_transcript_supadata', return_value=supadata_result) as mock_sd:
+            with patch.object(service, 'get_transcript_youtube') as mock_yt:
                 result = service.get_transcript("test_video")
 
+        mock_sd.assert_called_once()
+        mock_yt.assert_not_called()
         assert result.source == "supadata"
+
+    def test_get_transcript_fallback_to_youtube(self, service):
+        """Should try YouTube when Supadata fails."""
+        youtube_result = TranscriptResult(
+            video_id="test",
+            text="YouTube transcript",
+            language="en",
+            source="youtube",
+        )
+
+        with patch.object(service, 'get_transcript_supadata', return_value=None):
+            with patch.object(service, 'get_transcript_youtube', return_value=youtube_result):
+                result = service.get_transcript("test_video")
+
+        assert result.source == "youtube"
 
     def test_get_transcript_raises_when_both_fail(self, service):
         """Should raise TranscriptNotAvailable when all sources fail."""
-        with patch.object(service, 'get_transcript_youtube', return_value=None):
-            with patch.object(service, 'get_transcript_supadata', return_value=None):
+        with patch.object(service, 'get_transcript_supadata', return_value=None):
+            with patch.object(service, 'get_transcript_youtube', return_value=None):
                 with pytest.raises(TranscriptNotAvailable):
                     service.get_transcript("test_video")
 
     def test_get_transcript_no_fallback(self, service):
-        """Should not use Supadata when fallback disabled."""
-        with patch.object(service, 'get_transcript_youtube', return_value=None):
-            with patch.object(service, 'get_transcript_supadata') as mock_sd:
+        """Should not try YouTube when fallback disabled."""
+        with patch.object(service, 'get_transcript_supadata', return_value=None):
+            with patch.object(service, 'get_transcript_youtube') as mock_yt:
                 with pytest.raises(TranscriptNotAvailable):
                     service.get_transcript("test_video", use_fallback=False)
 
-        mock_sd.assert_not_called()
+        mock_yt.assert_not_called()
 
 
 class TestTranscriptServiceChunking:

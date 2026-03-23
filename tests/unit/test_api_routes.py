@@ -24,17 +24,18 @@ def mock_db():
 
 @pytest.fixture
 def client(mock_db):
-    """Create test client with mocked database."""
+    """Create test client with mocked database and auth disabled."""
     # Import and patch before creating app
-    with patch("app.main.init_db"):  # Skip DB initialization
-        from app.main import app
+    with patch("app.main.init_db"):
+        from app.main import app, verify_credentials
         from app.models import get_db
 
-        # Override the database dependency
+        # Override the database dependency and disable auth
         def override_get_db():
             yield mock_db
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[verify_credentials] = lambda: True
 
         with TestClient(app, raise_server_exceptions=False) as test_client:
             yield test_client
@@ -86,15 +87,16 @@ class TestStatusEndpoint:
         response = client.get("/api/status")
         assert response.status_code == 200
 
-    def test_status_returns_counts(self, client, mock_db):
-        """Status should include video counts."""
+    def test_status_returns_html(self, client, mock_db):
+        """Status should return HTML partial with video info."""
         mock_db.query.return_value.filter.return_value.count.return_value = 5
         mock_db.query.return_value.order_by.return_value.first.return_value = None
         mock_db.query.return_value.count.return_value = 10
+        mock_db.query.return_value.scalar.return_value = None
 
         response = client.get("/api/status")
-        data = response.json()
-        assert "pending_videos" in data
+        assert response.status_code == 200
+        assert "Videos" in response.text
 
 
 class TestChannelsEndpoint:
@@ -107,14 +109,13 @@ class TestChannelsEndpoint:
         response = client.get("/api/channels")
         assert response.status_code == 200
 
-    def test_channels_returns_list(self, client, mock_db):
-        """Channels should return list structure."""
-        mock_db.query.return_value.all.return_value = []
+    def test_channels_empty_returns_html(self, client, mock_db):
+        """Channels with no data should return empty state HTML."""
+        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
 
         response = client.get("/api/channels")
-        data = response.json()
-        assert "channels" in data
-        assert "total" in data
+        assert response.status_code == 200
+        assert "Keine" in response.text
 
 
 class TestVideosEndpoint:

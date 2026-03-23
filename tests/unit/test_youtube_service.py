@@ -56,18 +56,26 @@ class TestIsValidVideo:
         assert is_valid_video(video) is True
 
     def test_short_filtered(self):
-        """Videos under 60 seconds (Shorts) should be filtered."""
+        """Videos under 2 minutes should be filtered."""
         video = {
             "snippet": {"title": "Short Video", "liveBroadcastContent": "none"},
             "contentDetails": {"duration": "PT45S"},
         }
         assert is_valid_video(video) is False
 
-    def test_exactly_60_seconds_passes(self):
-        """Videos exactly 60 seconds should pass."""
+    def test_under_2_minutes_filtered(self):
+        """Videos under 2 minutes (60s) should be filtered."""
         video = {
             "snippet": {"title": "Borderline Video", "liveBroadcastContent": "none"},
             "contentDetails": {"duration": "PT1M"},
+        }
+        assert is_valid_video(video) is False
+
+    def test_exactly_2_minutes_passes(self):
+        """Videos exactly 2 minutes (120s) should pass."""
+        video = {
+            "snippet": {"title": "Just Long Enough", "liveBroadcastContent": "none"},
+            "contentDetails": {"duration": "PT2M"},
         }
         assert is_valid_video(video) is True
 
